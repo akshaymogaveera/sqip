@@ -18,6 +18,14 @@ class Organization(models.Model):
         ('restaurant', 'Restaurant'),
         ('clinic', 'Clinic'),
         ('doctor', 'Doctor'),
+        ('company', 'Company'),
+        ('store', 'Store'),
+        ('home', 'Home'),
+        ('bank', 'Bank'),
+        ('ATM', 'ATM'),
+        ('school', 'School'),
+        ('factory', 'Factory'),
+        ('others', 'Others'),
         # Add other choices as needed
     ]
     name = models.CharField(max_length=200)
