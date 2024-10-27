@@ -6,7 +6,7 @@ api/auth/ - Get auth token, Select Auth type as "No Auth"
 
 Body
 ```
-{"username": "akshay"}
+{"username": "test"}
 ```
 
 Sample Response:
