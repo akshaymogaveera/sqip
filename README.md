@@ -2,8 +2,9 @@
 
 ------------------------------------------------------------------------------------------------
 > Auth
-api/auth/ - Get auth token, Select Auth type as "No Auth"
+Get auth token, Select Auth type as "No Auth"
 
+URL: ```api/auth/``` (POST)
 Body
 ```
 {"username": "test"}
@@ -23,8 +24,8 @@ Sample Response:
 
 ------------------------------------------------------------------------------------------------
 > Create Appointment
-/api/appointments/create/ - POST
 
+URL: ```/api/appointments/create/``` (POST)
 ```
 {
     "organization": 1,  # Name of Entity
