@@ -1,6 +1,3 @@
-from django.shortcuts import render
-from django.http import HttpResponse
-from django.db import models
 from main.appointments.service import handle_appointment_scheduling
 from main.appointments.utils import update_appointment
 from main.service import (
@@ -23,6 +20,7 @@ from main.appointments.serializers import (
     MakeAppointmentSerializer,
     OrganizationSerializer,
     ValidateAppointmentInput,
+    AppointmentListQueryParamsSerializer
 )
 from rest_framework.pagination import PageNumberPagination
 
@@ -39,7 +37,7 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
     serializer_class = AppointmentSerializer
     pagination_class = StandardResultsSetPagination
 
-    def list(self, request):
+    def list(self, request, *args, **kwargs):
         """Returns list of all User appointments.
         
         ?status_filter=all (default)
@@ -77,13 +75,20 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
             User
                 - Groups: [Tim Hortons] - This group admin will be able to see all appointments under Tim Hortons.
         
+        ** Recommended one group assigned to each user
+
+        /appointments/scheduled/?category_id=1&category_id=2&category_id=3
         """
         user = self.request.user
 
+        query_params_serializer = AppointmentListQueryParamsSerializer(data=request.query_params)
+        query_params_serializer.is_valid(raise_exception=True)
+        category_ids = query_params_serializer.validated_data.get("category_id", [])
+
         if user.is_superuser or user.is_staff:
-            scheduled_appointments = get_scheduled_appointments_for_superuser()
+            scheduled_appointments = get_scheduled_appointments_for_superuser(category_ids=category_ids)
         else:
-            scheduled_appointments = get_scheduled_appointments_for_user(user)
+            scheduled_appointments = get_scheduled_appointments_for_user(user, category_ids=category_ids)
 
         # Paginate the queryset using StandardResultsSetPagination
         page = self.paginate_queryset(scheduled_appointments)
@@ -103,14 +108,22 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         else: Users that are Group Admin may have groups assigned to them.
             User
                 - Groups: [Tim Hortons] - This group admin will be able to see all appointments under Tim Hortons.
-        
+        ** Recommended one group assigned to each user
+
+        /appointments/unscheduled/?category_id=1&category_id=2&category_id=3
         """
         user = self.request.user
 
+        query_params_serializer = AppointmentListQueryParamsSerializer(data=request.query_params)
+        query_params_serializer.is_valid(raise_exception=True)
+        category_ids = query_params_serializer.validated_data.get("category_id", [])
+
+        print(category_ids, "-----------")
+
         if user.is_superuser or user.is_staff:
-            unscheduled_appointments = get_unscheduled_appointments_for_superuser()
+            unscheduled_appointments = get_unscheduled_appointments_for_superuser(category_ids=category_ids)
         else:
-            unscheduled_appointments = get_unscheduled_appointments_for_user(user)
+            unscheduled_appointments = get_unscheduled_appointments_for_user(user, category_ids=category_ids)
 
         # Paginate the queryset using StandardResultsSetPagination
         page = self.paginate_queryset(unscheduled_appointments)

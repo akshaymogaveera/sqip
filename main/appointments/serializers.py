@@ -1,6 +1,6 @@
 # in your app/serializers.py
 
-from main.service import check_category_is_active, check_organization_is_active, check_user_exists
+from main.service import check_category_is_active, check_organization_is_active, check_user_exists, are_valid_category_ids
 from rest_framework import serializers
 from main.models import Appointment, Category, Organization
 
@@ -67,3 +67,23 @@ class MakeAppointmentSerializer(serializers.ModelSerializer):
         model = Appointment
         fields = ['id', 'user', 'category', 'type', 'organization', 'status', 'date_created', 'counter', 'is_scheduled', 'estimated_time']
         
+
+class AppointmentListQueryParamsSerializer(serializers.Serializer):
+    category_id = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_empty=True
+    )
+
+    def validate_category_id(self, value):
+        # Validate the list length
+        if not value:
+            return value
+        if len(value) > 10:
+            raise serializers.ValidationError("You can only filter by a maximum of 10 category IDs.")
+        
+        # Validate category IDs using the service method
+        if not are_valid_category_ids(value):
+            raise serializers.ValidationError("One or more category IDs are invalid.")
+
+        return value

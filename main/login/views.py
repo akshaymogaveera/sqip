@@ -14,7 +14,7 @@ from django.http import JsonResponse
 from django.contrib.auth import get_user_model
 
 def index(request):
-    return HttpResponse('Hello, welcome to the index page.')
+    return HttpResponse('Hello, welcome to SQIP!.')
 
 
 class ValidateToken(APIView):

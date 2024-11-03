@@ -51,3 +51,116 @@ Sample Response:
 }
 ```
 ------------------------------------------------------------------------------------------------
+
+> List Appointment
+
+URL: ```/api/appointments/``` (GET)
+
+Query parameters
+```
+        ?status_filter=all (default)
+        ?status_filter=scheduled
+        ?status_filter=unscheduled
+```
+
+Sample Response:
+```
+{
+    "count": 2,
+    "next": null,
+    "previous": null,
+    "results": [
+        {
+            "id": 126,
+            "type": "",
+            "counter": 5,
+            "status": "active",
+            "date_created": "2024-11-03T00:52:12.463655Z",
+            "is_scheduled": false,
+            "estimated_time": null,
+            "user": 3,
+            "category": 1,
+            "organization": 1
+        },
+        {
+            "id": 127,
+            "type": "",
+            "counter": 1,
+            "status": "active",
+            "date_created": "2024-11-03T00:52:37.484204Z",
+            "is_scheduled": false,
+            "estimated_time": null,
+            "user": 3,
+            "category": 2,
+            "organization": 2
+        }
+    ]
+}
+```
+------------------------------------------------------------------------------------------------
+
+> List Unscheduled Appointment
+
+URL: ```/api/appointments/unscheduled/``` (GET)
+
+Query parameters
+```
+    ?category_id=1&category_id=2&category_id=3 (filter by categories)
+```
+
+Sample Response:
+```
+{
+    "count": 1,
+    "next": null,
+    "previous": null,
+    "results": [
+        {
+            "id": 126,
+            "type": "",
+            "counter": 5,
+            "status": "active",
+            "date_created": "2024-11-03T00:52:12.463655Z",
+            "is_scheduled": false,
+            "estimated_time": null,
+            "user": 3,
+            "category": 1,
+            "organization": 1
+        }
+    ]
+}
+```
+------------------------------------------------------------------------------------------------
+
+> List Scheduled Appointment
+
+URL: ```/api/appointments/scheduled/``` (GET)
+
+Query parameters
+```
+    ?category_id=1&category_id=2&category_id=3 (filter by categories)
+```
+
+Sample Response:
+```
+{
+    "count": 1,
+    "next": null,
+    "previous": null,
+    "results": [
+        {
+            "id": 126,
+            "type": "",
+            "counter": 5,
+            "status": "active",
+            "date_created": "2024-11-03T00:52:12.463655Z",
+            "is_scheduled": true,
+            "estimated_time": null,
+            "user": 3,
+            "category": 1,
+            "organization": 1
+        }
+    ]
+}
+```
+------------------------------------------------------------------------------------------------

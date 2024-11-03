@@ -36,8 +36,8 @@ class TestMakeAppointment:
             country="Test Country",
             type="restaurant",  # Choose a valid type from your TYPE choices
             status="active",  # Choose a valid status from your STATUS_CHOICES
-            group=self.group,  # Associate with the test group if needed
         )
+        self.organization.groups.add(self.group)
         # Create an active category
         self.category = Category.objects.create(
             organization=self.organization,
@@ -90,9 +90,9 @@ class TestMakeAppointment:
             state="Test State",
             country="Test Country",
             type="restaurant",
-            status="inactive",
-            group=Group.objects.create(name="Test Group1"),
+            status="inactive"
         )
+        inactive_organization.groups.add(Group.objects.create(name="Test Group1"))
 
         url = f'{reverse("appointments-list")}create/'
         data = {
@@ -130,6 +130,42 @@ class TestMakeAppointment:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "Category does not exist or is not active." in str(
+            response.data["errors"]
+        )
+
+    def test_make_appointment_category_with_wrong_org(self):
+        """Test creating an appointment with wrong org."""
+
+        dummy_organization = Organization.objects.create(
+            name="Test Organization1",
+            created_by=self.user,
+            portfolio_site="",
+            display_picture=None,
+            city="Test City",
+            state="Test State",
+            country="Test Country",
+            type="restaurant",
+            status="active"
+        )
+        inactive_category = Category.objects.create(
+            organization=dummy_organization,
+            status="active",
+            type="general",
+            created_by=self.user,
+        )
+
+        url = f'{reverse("appointments-list")}create/'
+        data = {
+            "organization": self.organization.id,
+            "category": inactive_category.id,
+            "user": self.user.id,
+            "is_scheduled": False,
+        }
+
+        response = self.client.post(url, data, format="json")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'Category does not exist or is not accepting appointments.' in str(
             response.data["errors"]
         )
 

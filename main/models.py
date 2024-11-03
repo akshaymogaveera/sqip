@@ -37,12 +37,10 @@ class Organization(models.Model):
     country = models.CharField(max_length=20)
     type = models.CharField(max_length=20, choices=TYPE)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
-    group = models.ForeignKey(Group, on_delete=models.PROTECT)
+    groups = models.ManyToManyField(Group, related_name='organizations')
 
-    def __str__(self):
-        return self.name
 
-class Category(models.Model):
+class Category(models.Model): 
     STATUS_CHOICES = [
         ('active', 'Active'),
         ('inactive', 'Inactive'),
@@ -53,11 +51,15 @@ class Category(models.Model):
         ('inperson', 'In Person'),
         # Add other choices as needed
     ]
+    group = models.OneToOneField(Group, on_delete=models.PROTECT, related_name="categories", blank=True, null=True)
     organization = models.ForeignKey(Organization, on_delete=models.PROTECT)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     type = models.CharField(max_length=20, choices=CHOICES)
     estimated_time = models.DateTimeField(null=True, blank=True)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(blank=True, null=True,default=timezone.now)
+
 
 class Appointment(models.Model):
     STATUS_CHOICES = [
