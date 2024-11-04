@@ -190,7 +190,7 @@ Sample Response:
 
 > Check-In Appointment
 
-URL: ```/api/appointments/<appointment_id>/check-in/``` (GET)
+URL: ```/api/appointments/<appointment_id>/check-in/``` (POST)
 
 
 Sample Response:
@@ -203,7 +203,7 @@ Sample Response:
 
 > Cancel Appointment
 
-URL: ```/api/appointments/<appointment_id>/cancel/``` (GET)
+URL: ```/api/appointments/<appointment_id>/cancel/``` (POST)
 
 
 Sample Response:
