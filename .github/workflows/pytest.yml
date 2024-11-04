@@ -1,0 +1,29 @@
+name: Run Pytest
+
+on:
+  push:
+    branches:
+      - main  # Adjust to your default branch
+      - '*feature/*'  # Run on all feature branches, adjust as necessary
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.8'  # Adjust to your desired Python version
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt  # Ensure your requirements.txt is set up
+
+      - name: Run tests
+        run: |
+          pytest  # Add any specific flags or options as needed
