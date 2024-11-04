@@ -78,6 +78,8 @@ class Appointment(models.Model):
     date_created = models.DateTimeField(auto_now_add=True)
     is_scheduled = models.BooleanField(default=False)
     estimated_time = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="created_appointments")
+    updated_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="updated_appointments")
 
 class SubCategory(models.Model):
     category = models.ForeignKey(Category, on_delete=models.PROTECT)

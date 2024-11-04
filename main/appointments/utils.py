@@ -2,7 +2,11 @@
 from main.models import Appointment
 from django.db import models
 
-def update_appointment(appointment, status, increment=False, current_counter=None):
+from main.service import get_appointment_by_id
+
+def update_appointment(appointment_id, status, increment=False, current_counter=None):
+
+    appointment = get_appointment_by_id(appointment_id)
     appointment.status = status
     appointment.save()
 

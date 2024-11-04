@@ -6,6 +6,7 @@ from main.service import (
     get_unscheduled_appointments_for_superuser,
     get_unscheduled_appointments_for_user,
     get_user_appointments,
+    set_appointment_status,
 )
 from main.verification.utils import check_if_user_is_authorized, check_user_in_group
 from rest_framework.permissions import IsAuthenticated
@@ -16,6 +17,7 @@ from rest_framework import status
 from rest_framework.decorators import action
 from main.models import Appointment, Category, Organization, User
 from main.appointments.serializers import (
+    AppointmentIDValidatorSerializer,
     AppointmentSerializer,
     MakeAppointmentSerializer,
     OrganizationSerializer,
@@ -118,8 +120,6 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         query_params_serializer.is_valid(raise_exception=True)
         category_ids = query_params_serializer.validated_data.get("category_id", [])
 
-        print(category_ids, "-----------")
-
         if user.is_superuser or user.is_staff:
             unscheduled_appointments = get_unscheduled_appointments_for_superuser(category_ids=category_ids)
         else:
@@ -158,19 +158,14 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         input_serializer = ValidateAppointmentInput(
             data=request.data, context={"request": request}
         )
-        if not input_serializer.is_valid():
-            return Response(
-                {"errors": input_serializer.errors}, status=status.HTTP_400_BAD_REQUEST
-            )
+        input_serializer.is_valid(raise_exception=True)
 
         # Main serializer validation
         serializer = MakeAppointmentSerializer(
             data=request.data, context={"request": request}
         )
-        if not serializer.is_valid():
-            return Response(
-                {"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST
-            )
+        serializer.is_valid(raise_exception=True)
+
 
         # Check if appointment is scheduled
         if not input_serializer.validated_data.get("is_scheduled"):
@@ -186,53 +181,64 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
 
             # Set counter for new appointment
             serializer.validated_data["counter"] = counter
+            serializer.validated_data["created_by"] = self.request.user
         else:
             Response({"errors": "Yet to Implement"}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=["post"], url_path="check_in")
+    @action(detail=True, methods=["post"], url_path="check-in")
     def check_in(self, request, pk=None):
-        try:
-            appointment = self.get_queryset().get(pk=pk, status="active")
-            # get organization from appointment
-            # check if the user is in organizations group (admin) else deny access
+        """Check-in to an appointment.
 
-            # get group
-            group = appointment.organization.group
-            if not check_user_in_group(self.request.user, group):
-                return Response({"detail": "Unauthorized."}, status=status.HTTP_200_OK)
+        Args:
+            request: The request object containing appointment ID in query parameters.
+            pk: Primary key of the appointment (not used in this method).
 
-            update_appointment(appointment, "checkin")
+        Returns:
+            Response: A response indicating the success or failure of the check-in operation.
+        """
 
-            return Response(
-                {"detail": "Checked in successfully."}, status=status.HTTP_200_OK
-            )
-        except Appointment.DoesNotExist:
-            return Response(
-                {"detail": "Appointment not found."}, status=status.HTTP_404_NOT_FOUND
-            )
+        # Validate appointment ID from query parameters
+        query_params_serializer = AppointmentIDValidatorSerializer(data={"appointment_id": pk}, context={"request": request})
+        query_params_serializer.is_valid(raise_exception=True)
+        appointment_id = query_params_serializer.validated_data['appointment_id']
+
+        # Set appointment status to "checkin"
+        success, message = set_appointment_status(appointment_id, "checkin", self.request.user)
+
+        if success:
+            return Response({"detail": message}, status=status.HTTP_200_OK)
+        else:
+            return Response({"errors": message}, status=status.HTTP_400_BAD_REQUEST)
+        
 
     @action(detail=True, methods=["post"], url_path="cancel")
     def cancel(self, request, pk=None):
-        try:
-            appointment = self.get_queryset().get(pk=pk, status="active")
+        """Cancel to an appointment.
 
-            # get group
-            group = appointment.organization.group
-            if not check_if_user_is_authorized(self.request.user, appointment, group):
-                return Response({"detail": "Unauthorized."}, status=status.HTTP_200_OK)
+        Args:
+            request: The request object containing appointment ID in query parameters.
+            pk: Primary key of the appointment (not used in this method).
 
-            update_appointment(appointment, "cancel")
+        Returns:
+            Response: A response indicating the success or failure of the cancel operation.
+        """
 
-            return Response(
-                {"detail": "Cancelled successfully."}, status=status.HTTP_200_OK
-            )
-        except Appointment.DoesNotExist:
-            return Response(
-                {"detail": "Appointment not found."}, status=status.HTTP_404_NOT_FOUND
-            )
+        # Validate appointment ID from query parameters
+        query_params_serializer = AppointmentIDValidatorSerializer(data={"appointment_id": pk}, context={"request": request, "check_creator": True})
+        query_params_serializer.is_valid(raise_exception=True)
+        appointment_id = query_params_serializer.validated_data['appointment_id']
+
+        # Set appointment status to "cancel"
+        success, message = set_appointment_status(appointment_id, "cancel", self.request.user)
+
+        if success:
+            return Response({"detail": message}, status=status.HTTP_200_OK)
+        else:
+            return Response({"errors": message}, status=status.HTTP_400_BAD_REQUEST)
+
 
     @action(detail=True, methods=["post"], url_path="move")
     def move(self, request, pk=None):

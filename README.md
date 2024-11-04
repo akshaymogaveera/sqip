@@ -52,6 +52,29 @@ Sample Response:
 ```
 ------------------------------------------------------------------------------------------------
 
+> Get Appointment
+
+URL: ```/api/appointments/<appointment_id>/``` (GET)
+
+Sample Response:
+```
+{
+    "id": 118,
+    "type": "",
+    "counter": 1,
+    "status": "inactive",
+    "date_created": "2024-10-27T00:31:31.327052Z",
+    "is_scheduled": false,
+    "estimated_time": null,
+    "user": 6,
+    "category": 1,
+    "organization": 1,
+    "created_by": null,
+    "updated_by": null
+}
+```
+------------------------------------------------------------------------------------------------
+
 > List Appointment
 
 URL: ```/api/appointments/``` (GET)
@@ -161,6 +184,32 @@ Sample Response:
             "organization": 1
         }
     ]
+}
+```
+------------------------------------------------------------------------------------------------
+
+> Check-In Appointment
+
+URL: ```/api/appointments/<appointment_id>/check-in/``` (GET)
+
+
+Sample Response:
+```
+{
+    "detail": "Appointment status updated to 'checkin' successfully."
+}
+```
+------------------------------------------------------------------------------------------------
+
+> Cancel Appointment
+
+URL: ```/api/appointments/<appointment_id>/cancel/``` (GET)
+
+
+Sample Response:
+```
+{
+    "detail": "Appointment status updated to 'cancel' successfully."
 }
 ```
 ------------------------------------------------------------------------------------------------

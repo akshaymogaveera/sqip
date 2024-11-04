@@ -15,6 +15,10 @@ class TestMakeAppointment:
         self.user = User.objects.create_user(
             username="testuser", password="testpassword"
         )
+
+        self.group = Group.objects.create(name="Test Group for User")
+        self.user.groups.add(self.group)
+
         token_response = self.client.post(
             reverse("token_obtain_pair"),
             {"username": "testuser", "password": "testpassword"},
@@ -22,8 +26,6 @@ class TestMakeAppointment:
         self.token = token_response.data["access"]
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
 
-        # Create a test group if necessary
-        self.group = Group.objects.create(name="Test Group")
 
         # Create an active organization and associate it with the created user
         self.organization = Organization.objects.create(
@@ -45,8 +47,26 @@ class TestMakeAppointment:
             type="general",
             created_by=self.user,
         )
+
+        self.category_1 = Category.objects.create(
+            organization=self.organization,
+            status="active",
+            type="online",
+            created_by=self.user,
+            group=self.group
+        )
         # Log in the user
         self.client.login(username="testuser", password="testpassword")
+
+        # Create an appointment to use in check-in and cancel tests
+        self.appointment = Appointment.objects.create(
+            organization=self.organization,
+            category=self.category_1,
+            user=self.user,
+            status="active",
+            created_by=self.user,
+            updated_by=self.user
+        )
 
     def test_make_appointment_success(self):
         """Test successfully creating an appointment."""
@@ -61,8 +81,6 @@ class TestMakeAppointment:
         response = self.client.post(url, data, format="json")
 
         assert response.status_code == status.HTTP_201_CREATED
-        assert Appointment.objects.count() == 1
-        assert Appointment.objects.get().user == self.user
 
     def test_make_appointment_user_not_found(self):
         """Test creating an appointment with a non-existing user."""
@@ -77,7 +95,7 @@ class TestMakeAppointment:
         response = self.client.post(url, data, format="json")
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert response.json() == {'errors': {'user': ['User does not exist.']}}
+        assert response.json() == {'user': ['User does not exist.']}
 
     def test_make_appointment_organization_not_active(self):
         """Test creating an appointment with a non-active organization."""
@@ -105,9 +123,7 @@ class TestMakeAppointment:
         response = self.client.post(url, data, format="json")
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Organization does not exist or is not active." in str(
-            response.data["errors"]
-        )
+        assert response.json() == {'organization': ['Organization does not exist or is not active.']}
 
     def test_make_appointment_category_not_active(self):
         """Test creating an appointment with a non-active category."""
@@ -129,9 +145,7 @@ class TestMakeAppointment:
         response = self.client.post(url, data, format="json")
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Category does not exist or is not active." in str(
-            response.data["errors"]
-        )
+        assert response.json() == {'category': ['Category does not exist or is not active.']}
 
     def test_make_appointment_category_with_wrong_org(self):
         """Test creating an appointment with wrong org."""
@@ -200,10 +214,9 @@ class TestMakeAppointment:
             "is_scheduled": False,
         }
         response1 = self.client.post(url, data, format="json")
-
+        apppointment = Appointment.objects.get(id=response1.json().get("id"))
         assert response1.status_code == status.HTTP_201_CREATED
-        assert Appointment.objects.count() == 1
-        assert Appointment.objects.get().counter == 1  # Check that counter is set to 1
+        assert apppointment.counter == 1  # Check that counter is set to 1
 
         self.user = User.objects.create_user(
             username="testuser1", password="testpassword"
@@ -225,10 +238,8 @@ class TestMakeAppointment:
         # Create a second appointment
         response2 = self.client.post(url, data, format="json")
         assert response2.status_code == status.HTTP_201_CREATED
-        assert Appointment.objects.count() == 2
-        assert (
-            Appointment.objects.latest("id").counter == 2
-        )  # Check that counter is incremented to 2
+        apppointment = Appointment.objects.get(id=response2.json().get("id"))
+        assert apppointment.counter == 2
 
         self.user = User.objects.create_user(
             username="testuser3", password="testpassword"
@@ -247,15 +258,13 @@ class TestMakeAppointment:
             "is_scheduled": False,
         }
 
-        # Create a second appointment
+        # Create a third appointment
         response2 = self.client.post(url, data, format="json")
         assert response2.status_code == status.HTTP_201_CREATED
-        assert Appointment.objects.count() == 3
-        assert (
-            Appointment.objects.latest("id").counter == 3
-        )  # Check that counter is incremented to 2
+        apppointment = Appointment.objects.get(id=response2.json().get("id"))
+        assert apppointment.counter == 3
 
-    def test_make_appointment_no_acess(self):
+    def test_make_appointment_no_access(self):
         """Test make appointment if no access."""
         url = f'{reverse("appointments-list")}create/'
 
@@ -279,7 +288,7 @@ class TestMakeAppointment:
         # Create a second appointment
         response = self.client.post(url, data, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert response.json() == {'errors': {'user': ['You are not allowed to create an appointment for this user.']}}
+        assert response.json() == {'non_field_errors': ['You are not allowed to create an appointment for this user.']}
 
     def test_make_appointment_with_admin_acess(self):
         """Test make appointment with admin access."""
@@ -305,6 +314,226 @@ class TestMakeAppointment:
         # Create a second appointment
         response = self.client.post(url, data, format="json")
         assert response.status_code == 201
+
+    def test_make_appointment_with_group_admin_acess(self):
+        """Test make appointment with group admin access."""
+        url = f'{reverse("appointments-list")}create/'
+
+        # Create group admin user
+        group = Group.objects.create(name="Test Group Admin")
+        user_group_admin = User.objects.create_user(
+            username="testuser5", password="testpassword"
+        )
+        user_group_admin.groups.add(group)
+
+        category_group = Category.objects.create(
+            organization=self.organization,
+            status="active",
+            type="online",
+            created_by=self.user,
+            group=group
+        )
+
+        # Create regular user
+        test_new_user = User.objects.create_user(
+            username="testuser6", password="testpassword"
+        )
+
+        token_response = self.client.post(
+            reverse("token_obtain_pair"),
+            {"username": "testuser5", "password": "testpassword"},
+        )
+        token = token_response.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        data = {
+            "organization": self.organization.id,
+            "category": category_group.id,
+            "user": test_new_user.id,
+            "is_scheduled": False,
+        }
+
+        # Create a second appointment
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == 201
+        
+
+    def test_check_in_success(self):
+        """Test successfully checking in to an appointment."""
+        url = reverse("appointments-check-in", args=[self.appointment.id])
+
+        response = self.client.post(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["detail"] == "Appointment status updated to 'checkin' successfully."
+        self.appointment.refresh_from_db()
+        assert self.appointment.status == "checkin"
+
+    def test_check_in_if_appt_creator(self):
+        """Test check-in with an unauthorized user."""
+        new_user = User.objects.create_user(username="unauthorized_user", password="testpassword")
+        self.client.force_authenticate(user=new_user)
+
+        new_appt = Appointment.objects.create(
+            organization=self.organization,
+            category=self.category_1,
+            user=new_user,
+            status="active",
+            created_by=self.user,
+            updated_by=self.user
+        )
+
+        url = reverse("appointments-check-in", args=[new_appt.id])
+        response = self.client.post(url)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json() == {'non_field_errors': ['Unauthorized to access this appointment.']}
+        self.appointment.refresh_from_db()
+        assert self.appointment.status == "active"  # Status should remain unchanged
+
+    def test_cancel_success(self):
+        """Test successfully canceling an appointment."""
+        url = reverse("appointments-cancel", args=[self.appointment.id])
+
+        response = self.client.post(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["detail"] == "Appointment status updated to 'cancel' successfully."
+        self.appointment.refresh_from_db()
+        assert self.appointment.status == "cancel"
+
+    def test_cancel_if_appt_creator(self):
+        """Test cancel with an unauthorized user."""
+        new_user = User.objects.create_user(username="unauthorized_user", password="testpassword")
+        self.client.force_authenticate(user=new_user)
+
+        new_appt = Appointment.objects.create(
+            organization=self.organization,
+            category=self.category_1,
+            user=new_user,
+            status="active",
+            created_by=self.user,
+            updated_by=self.user
+        )
+
+        url = reverse("appointments-cancel", args=[new_appt.id])
+        response = self.client.post(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["detail"] == "Appointment status updated to 'cancel' successfully."
+        new_appt.refresh_from_db()
+        assert new_appt.status == "cancel"
+
+    def test_cancel_unauthorized_user(self):
+        """Test canceling an appointment by an unauthorized user."""
+        new_user = User.objects.create_user(username="unauthorized_user", password="testpassword")
+        self.client.force_authenticate(user=new_user)
+
+        url = reverse("appointments-cancel", args=[self.appointment.id])
+        response = self.client.post(url)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json() == {'non_field_errors': ['Unauthorized to access this appointment.']}
+        self.appointment.refresh_from_db()
+        assert self.appointment.status == "active"  # Status should remain unchanged
+
+    def test_check_in_invalid_appointment(self):
+        """Test check-in with a non-existing appointment."""
+        url = reverse("appointments-check-in", args=[99999])  # Non-existing ID
+        response = self.client.post(url)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json() == {'non_field_errors':['Appointment with this ID does not exist.']}
+
+
+    def test_cancel_invalid_appointment(self):
+        """Test canceling a non-existing appointment."""
+        url = reverse("appointments-cancel", args=[99999])  # Non-existing ID
+        response = self.client.post(url)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json() == {'non_field_errors': ['Appointment with this ID does not exist.']}
+
+    def test_check_in_staff_user(self):
+        """Test check-in for a staff user with admin access."""
+        # Log in as staff user
+        self.client.logout()
+        self.staff_user = User.objects.create_user(
+            username="staffuser", password="testpassword", is_staff=True
+        )
+        token_response = self.client.post(
+            reverse("token_obtain_pair"),
+            {"username": "staffuser", "password": "testpassword"},
+        )
+        self.token = token_response.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
+
+        url = reverse("appointments-check-in", kwargs={"pk": self.appointment.id})
+        response = self.client.post(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"detail": "Appointment status updated to 'checkin' successfully."}
+
+    def test_check_in_superuser(self):
+        """Test check-in for a superuser."""
+        # Log in as superuser
+        self.client.logout()
+        self.superuser = User.objects.create_superuser(
+            username="superuser", password="testpassword"
+        )
+        token_response = self.client.post(
+            reverse("token_obtain_pair"),
+            {"username": "superuser", "password": "testpassword"},
+        )
+        self.token = token_response.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
+
+        url = reverse("appointments-check-in", kwargs={"pk": self.appointment.id})
+        response = self.client.post(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"detail": "Appointment status updated to 'checkin' successfully."}
+
+    def test_cancel_regular_user(self):
+        """Test cancel for a regular user without admin access."""
+        url = reverse("appointments-cancel", kwargs={"pk": self.appointment.id})
+        response = self.client.post(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"detail": "Appointment status updated to 'cancel' successfully."}
+
+    def test_cancel_staff_user(self):
+        """Test cancel for a staff user with admin access."""
+        # Log in as staff user
+        self.client.logout()
+        self.staff_user = User.objects.create_user(
+            username="staffuser", password="testpassword", is_staff=True
+        )
+        token_response = self.client.post(
+            reverse("token_obtain_pair"),
+            {"username": "staffuser", "password": "testpassword"},
+        )
+        self.token = token_response.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
+
+        url = reverse("appointments-cancel", kwargs={"pk": self.appointment.id})
+        response = self.client.post(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"detail": "Appointment status updated to 'cancel' successfully."}
+
+    def test_cancel_superuser(self):
+        """Test cancel for a superuser."""
+        # Log in as superuser
+        self.client.logout()
+        self.superuser = User.objects.create_superuser(
+            username="superuser", password="testpassword"
+        )
+        token_response = self.client.post(
+            reverse("token_obtain_pair"),
+            {"username": "superuser", "password": "testpassword"},
+        )
+        self.token = token_response.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
+
+        url = reverse("appointments-cancel", kwargs={"pk": self.appointment.id})
+        response = self.client.post(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"detail": "Appointment status updated to 'cancel' successfully."}
 
     def teardown_method(self):
         """Clean up after each test if needed."""
