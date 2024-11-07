@@ -3,70 +3,78 @@ from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
+
 # Create your models here.
 
 User = get_user_model()
 
+
 class Organization(models.Model):
     STATUS_CHOICES = [
-        ('active', 'Active'),
-        ('inactive', 'Inactive'),
+        ("active", "Active"),
+        ("inactive", "Inactive"),
         # Add other choices as needed
     ]
 
     TYPE = [
-        ('restaurant', 'Restaurant'),
-        ('clinic', 'Clinic'),
-        ('doctor', 'Doctor'),
-        ('company', 'Company'),
-        ('store', 'Store'),
-        ('home', 'Home'),
-        ('bank', 'Bank'),
-        ('ATM', 'ATM'),
-        ('school', 'School'),
-        ('factory', 'Factory'),
-        ('others', 'Others'),
+        ("restaurant", "Restaurant"),
+        ("clinic", "Clinic"),
+        ("doctor", "Doctor"),
+        ("company", "Company"),
+        ("store", "Store"),
+        ("home", "Home"),
+        ("bank", "Bank"),
+        ("ATM", "ATM"),
+        ("school", "School"),
+        ("factory", "Factory"),
+        ("others", "Others"),
         # Add other choices as needed
     ]
     name = models.CharField(max_length=200)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
     portfolio_site = models.URLField(blank=True)
-    display_picture = models.ImageField(upload_to='display_picture', blank=True)
+    display_picture = models.ImageField(upload_to="display_picture", blank=True)
     city = models.CharField(max_length=20)
     state = models.CharField(max_length=20, blank=True)
     country = models.CharField(max_length=20)
     type = models.CharField(max_length=20, choices=TYPE)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
-    groups = models.ManyToManyField(Group, related_name='organizations')
+    groups = models.ManyToManyField(Group, related_name="organizations")
 
 
-class Category(models.Model): 
+class Category(models.Model):
     STATUS_CHOICES = [
-        ('active', 'Active'),
-        ('inactive', 'Inactive'),
+        ("active", "Active"),
+        ("inactive", "Inactive"),
         # Add other choices as needed
     ]
     CHOICES = [
-        ('general', 'General'),
-        ('inperson', 'In Person'),
+        ("general", "General"),
+        ("inperson", "In Person"),
         # Add other choices as needed
     ]
-    group = models.OneToOneField(Group, on_delete=models.PROTECT, related_name="categories", blank=True, null=True)
+    group = models.OneToOneField(
+        Group,
+        on_delete=models.PROTECT,
+        related_name="categories",
+        blank=True,
+        null=True,
+    )
     organization = models.ForeignKey(Organization, on_delete=models.PROTECT)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     type = models.CharField(max_length=20, choices=CHOICES)
     estimated_time = models.DateTimeField(null=True, blank=True)
     description = models.CharField(max_length=255, blank=True, null=True)
-    created_at = models.DateTimeField(blank=True, null=True,default=timezone.now)
+    created_at = models.DateTimeField(blank=True, null=True, default=timezone.now)
 
 
 class Appointment(models.Model):
     STATUS_CHOICES = [
-        ('active', 'Active'),
-        ('inactive', 'Inactive'),
-        ('checkin', 'CheckIn'),
-        ('cancel', 'Cancelled')
+        ("active", "Active"),
+        ("inactive", "Inactive"),
+        ("checkin", "CheckIn"),
+        ("cancel", "Cancelled"),
         # Add other choices as needed
     ]
     user = models.ForeignKey(User, on_delete=models.PROTECT)
@@ -74,12 +82,27 @@ class Appointment(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.PROTECT)
     type = models.CharField(max_length=20, blank=True)
     counter = models.IntegerField(default=1)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_CHOICES[0][0])
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_CHOICES[0][0]
+    )
     date_created = models.DateTimeField(auto_now_add=True)
     is_scheduled = models.BooleanField(default=False)
     estimated_time = models.DateTimeField(null=True, blank=True)
-    created_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="created_appointments")
-    updated_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="updated_appointments")
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="created_appointments",
+    )
+    updated_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="updated_appointments",
+    )
+
 
 class SubCategory(models.Model):
     category = models.ForeignKey(Category, on_delete=models.PROTECT)
@@ -87,12 +110,14 @@ class SubCategory(models.Model):
     item = models.CharField(max_length=20)
     status = models.CharField(max_length=20, blank=True)
 
+
 class AppointmentMapToSubCategory(models.Model):
     category = models.ForeignKey(Category, on_delete=models.PROTECT)
     appointment = models.ForeignKey(Appointment, on_delete=models.PROTECT)
 
+
 class Profile(models.Model):
-    user=models.OneToOneField(User,   on_delete=models.CASCADE,related_name="profile")
-    phone_number=models.CharField(max_length=15)
-    otp=models.CharField(max_length=100,null=True,blank=True)
-    uid=models.CharField(default=f'{uuid.uuid4}',max_length=200)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
+    phone_number = models.CharField(max_length=15)
+    otp = models.CharField(max_length=100, null=True, blank=True)
+    uid = models.CharField(default=f"{uuid.uuid4}", max_length=200)

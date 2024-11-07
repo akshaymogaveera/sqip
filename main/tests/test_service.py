@@ -18,14 +18,19 @@ from main.service import (
     set_appointment_status,
 )
 
+
 @pytest.mark.django_db
 class TestUtilityFunctions:
-    
+
     def setup_method(self):
         """Set up data for testing."""
         # Create primary and secondary test users
-        self.user = User.objects.create_user(username="testuser", password="testpassword")
-        self.other_user = User.objects.create_user(username="otheruser", password="password")
+        self.user = User.objects.create_user(
+            username="testuser", password="testpassword"
+        )
+        self.other_user = User.objects.create_user(
+            username="otheruser", password="password"
+        )
 
         # Create groups and assign the primary user to a group
         self.group = Group.objects.create(name="Test Group")
@@ -67,13 +72,13 @@ class TestUtilityFunctions:
             status="active",
             type="general",
             created_by=self.user,
-            group=self.group
+            group=self.group,
         )
         self.category_inactive = Category.objects.create(
             organization=self.organization_active,
             status="inactive",
             type="general",
-            created_by=self.user
+            created_by=self.user,
         )
 
         # Additional category in a different group to test group restrictions
@@ -82,7 +87,7 @@ class TestUtilityFunctions:
             status="active",
             type="other",
             created_by=self.user,
-            group=self.other_group
+            group=self.other_group,
         )
 
         # Create active, unscheduled appointments for the primary user
@@ -92,7 +97,7 @@ class TestUtilityFunctions:
             user=self.user,
             status="active",
             counter=1,
-            is_scheduled=False
+            is_scheduled=False,
         )
         self.unscheduled_appointment_2 = Appointment.objects.create(
             organization=self.organization_active,
@@ -100,7 +105,7 @@ class TestUtilityFunctions:
             user=self.user,
             status="active",
             counter=2,
-            is_scheduled=False
+            is_scheduled=False,
         )
 
         # Scheduled appointment for the primary user
@@ -110,7 +115,7 @@ class TestUtilityFunctions:
             user=self.user,
             status="active",
             is_scheduled=True,
-            estimated_time="2024-11-05 14:30:00"
+            estimated_time="2024-11-05 14:30:00",
         )
 
         # Unscheduled appointment for a different user to test filtering by user
@@ -120,76 +125,98 @@ class TestUtilityFunctions:
             user=self.other_user,
             status="active",
             counter=3,
-            is_scheduled=False
+            is_scheduled=False,
         )
 
         # Create a superuser for tests requiring elevated privileges
-        self.superuser = User.objects.create_superuser(username="superuser", password="superpassword")
+        self.superuser = User.objects.create_superuser(
+            username="superuser", password="superpassword"
+        )
 
-        
-    
     # The tests for each utility function follow here
     def test_check_organization_is_active(self):
         """Test if the organization is active and exists."""
         # Test for active organization
-        assert check_organization_is_active(self.organization_active.id) == self.organization_active
-        
+        assert (
+            check_organization_is_active(self.organization_active.id)
+            == self.organization_active
+        )
+
         # Test for inactive organization
         assert check_organization_is_active(self.organization_inactive.id) is None
-        
+
         # Test for non-existing organization
         assert check_organization_is_active(9999) is None
 
     def test_check_category_is_active(self):
         """Test if the category is active and exists."""
         # Test for active category
-        assert check_category_is_active(self.category_active.id, self.organization_active) == self.category_active
+        assert (
+            check_category_is_active(self.category_active.id, self.organization_active)
+            == self.category_active
+        )
 
         # Test for active category if org not passed
         assert check_category_is_active(self.category_active.id) == self.category_active
-        
+
         # Test for inactive category
-        assert check_category_is_active(self.category_inactive.id, self.organization_active) is None
-        
+        assert (
+            check_category_is_active(
+                self.category_inactive.id, self.organization_active
+            )
+            is None
+        )
+
         # Test for non-existing category
         assert check_category_is_active(9999, self.organization_active) is None
-    
+
     def test_check_user_exists(self):
         """Test if the user exists."""
         # Test for existing user
         assert check_user_exists(self.user.id) == self.user
-        
+
         # Test for non-existing user
         assert check_user_exists(9999) is None
 
     def test_check_duplicate_appointment(self):
         """Test if an active duplicate appointment exists."""
         # Test for existing duplicate appointment
-        assert check_duplicate_appointment(
-            self.user, self.organization_active, self.category_active
-        ) is True
-        
+        assert (
+            check_duplicate_appointment(
+                self.user, self.organization_active, self.category_active
+            )
+            is True
+        )
+
         # Test for non-existing duplicate appointment
         non_duplicate_category = Category.objects.create(
             organization=self.organization_active, status="active", created_by=self.user
         )
-        assert check_duplicate_appointment(
-            self.user, self.organization_active, non_duplicate_category
-        ) is False
+        assert (
+            check_duplicate_appointment(
+                self.user, self.organization_active, non_duplicate_category
+            )
+            is False
+        )
 
     def test_get_last_counter_for_appointment(self):
         """Test if the last counter for an appointment is retrieved correctly."""
         # Test for existing appointments
-        assert get_last_counter_for_appointment(
-            self.organization_active, self.category_active
-        ) == 3  # Next counter after 2
-        
+        assert (
+            get_last_counter_for_appointment(
+                self.organization_active, self.category_active
+            )
+            == 3
+        )  # Next counter after 2
+
         # Test for no previous appointments
         empty_category = Category.objects.create(
             organization=self.organization_active, status="active", created_by=self.user
         )
-        assert get_last_counter_for_appointment(self.organization_active, empty_category) == 1
-
+        assert (
+            get_last_counter_for_appointment(self.organization_active, empty_category)
+            == 1
+        )
 
     def test_are_valid_category_ids(self):
         """Test if all category IDs are active."""
@@ -197,11 +224,15 @@ class TestUtilityFunctions:
             organization=self.organization_active, status="active", created_by=self.user
         )
         invalid_category = Category.objects.create(
-            organization=self.organization_active, status="inactive", created_by=self.user
+            organization=self.organization_active,
+            status="inactive",
+            created_by=self.user,
         )
 
         assert are_valid_category_ids([valid_category.id]) is True  # Valid
-        assert are_valid_category_ids([valid_category.id, invalid_category.id]) is False  # Mixed
+        assert (
+            are_valid_category_ids([valid_category.id, invalid_category.id]) is False
+        )  # Mixed
         assert are_valid_category_ids([9999]) is False  # Non-existing
 
     def test_get_user_appointments(self):
@@ -212,7 +243,9 @@ class TestUtilityFunctions:
 
         # Get unscheduled appointments
         unscheduled_appointments = get_user_appointments(self.user, is_scheduled=False)
-        assert len(unscheduled_appointments) == 2  # There are no unscheduled appointments
+        assert (
+            len(unscheduled_appointments) == 2
+        )  # There are no unscheduled appointments
 
         # Get scheduled appointments
         scheduled_appointments = get_user_appointments(self.user, is_scheduled=True)
@@ -226,12 +259,14 @@ class TestUtilityFunctions:
 
     def test_get_authorized_categories_for_user(self):
         """Test retrieving authorized categories for a user."""
-        
+
         categories = get_authorized_categories_for_user(self.user)
         assert len(categories) == 2
-        
+
         # Test for a user without authorized categories
-        unassigned_user = User.objects.create_user(username="unassigneduser", password="password")
+        unassigned_user = User.objects.create_user(
+            username="unassigneduser", password="password"
+        )
         categories_unassigned = get_authorized_categories_for_user(unassigned_user)
         assert len(categories_unassigned) == 0  # Should return no categories
 
@@ -245,7 +280,9 @@ class TestUtilityFunctions:
 
     def test_filter_by_category_id(self):
         """Test retrieval of unscheduled appointments filtered by specific category ID."""
-        appointments = get_unscheduled_appointments_for_user(self.user, category_ids=[self.category_active.id])
+        appointments = get_unscheduled_appointments_for_user(
+            self.user, category_ids=[self.category_active.id]
+        )
         assert len(appointments) == 2
         assert self.unscheduled_appointment_1 in appointments
         assert self.unscheduled_appointment_2 in appointments
@@ -256,11 +293,11 @@ class TestUtilityFunctions:
         appointments = get_unscheduled_appointments_for_user(new_user)
         assert len(appointments) == 0  # No appointments should be accessible
 
-
     def test_multiple_unscheduled_across_categories(self):
         """Test retrieval of unscheduled appointments across multiple categories."""
         appointments = get_unscheduled_appointments_for_user(
-            self.user, category_ids=[self.category_active.id, self.other_category_active.id]
+            self.user,
+            category_ids=[self.category_active.id, self.other_category_active.id],
         )
         assert len(appointments) == 3
         assert self.unscheduled_appointment_1 in appointments
@@ -271,7 +308,10 @@ class TestUtilityFunctions:
         # Create a new category and assign it to a different group for the user
         group2 = Group.objects.create(name="Another Group")
         category3 = Category.objects.create(
-            organization=self.organization_active, status="active", created_by=self.user, group=group2
+            organization=self.organization_active,
+            status="active",
+            created_by=self.user,
+            group=group2,
         )
         self.user.groups.add(group2)
 
@@ -281,7 +321,7 @@ class TestUtilityFunctions:
             category=category3,
             user=self.user,
             is_scheduled=False,
-            status="active"
+            status="active",
         )
 
         appointments = get_unscheduled_appointments_for_user(self.user)
@@ -291,8 +331,9 @@ class TestUtilityFunctions:
     def test_superuser_not_affected(self):
         """Ensure superuser has no impact on non-superuser queryset, expecting an empty result."""
         appointments = get_unscheduled_appointments_for_user(self.superuser)
-        assert len(appointments) == 0  # Superuser should not have non-superuser appointments by default
-
+        assert (
+            len(appointments) == 0
+        )  # Superuser should not have non-superuser appointments by default
 
     def test_basic_scheduled_retrieval(self):
         """Test retrieval of basic scheduled appointments for a user."""
@@ -302,7 +343,9 @@ class TestUtilityFunctions:
 
     def test_filter_by_category_id_for_scheduled(self):
         """Test retrieval of scheduled appointments filtered by specific category ID."""
-        appointments = get_scheduled_appointments_for_user(self.user, category_ids=[self.category_active.id])
+        appointments = get_scheduled_appointments_for_user(
+            self.user, category_ids=[self.category_active.id]
+        )
         assert len(appointments) == 1
         assert self.scheduled_appointment in appointments
 
@@ -315,7 +358,8 @@ class TestUtilityFunctions:
     def test_multiple_scheduled_across_categories(self):
         """Test retrieval of scheduled appointments across multiple categories."""
         appointments = get_scheduled_appointments_for_user(
-            self.user, category_ids=[self.category_active.id, self.other_category_active.id]
+            self.user,
+            category_ids=[self.category_active.id, self.other_category_active.id],
         )
         assert len(appointments) == 1
         assert self.scheduled_appointment in appointments
@@ -325,7 +369,10 @@ class TestUtilityFunctions:
         # Create a new category and assign it to a different group for the user
         group2 = Group.objects.create(name="Another Group")
         category3 = Category.objects.create(
-            organization=self.organization_active, status="active", created_by=self.user, group=group2
+            organization=self.organization_active,
+            status="active",
+            created_by=self.user,
+            group=group2,
         )
         self.user.groups.add(group2)
 
@@ -336,7 +383,7 @@ class TestUtilityFunctions:
             user=self.user,
             is_scheduled=True,
             status="active",
-            estimated_time="2024-11-05 15:00:00"
+            estimated_time="2024-11-05 15:00:00",
         )
 
         appointments = get_scheduled_appointments_for_user(self.user)
@@ -372,9 +419,9 @@ class TestUtilityFunctions:
             organization=self.organization_active,
             status="active",
             created_by=self.user,
-            updated_by=self.user
+            updated_by=self.user,
         )
-        
+
         result = get_appointment_by_id(active_appointment.id)
         assert result is not None
         assert result.id == active_appointment.id
@@ -390,9 +437,9 @@ class TestUtilityFunctions:
             organization=self.organization_active,
             status="inactive",
             created_by=self.user,
-            updated_by=self.user
+            updated_by=self.user,
         )
-        
+
         result = get_appointment_by_id(inactive_appointment.id)
         assert result is None
 
@@ -409,9 +456,9 @@ class TestUtilityFunctions:
             organization=self.organization_active,
             status="active",
             created_by=self.other_user,  # Different creator
-            updated_by=self.user
+            updated_by=self.user,
         )
-        
+
         # User should have access via category authorization
         result = check_if_user_has_authorized_category_access(appointment.id, self.user)
         assert result is True
@@ -424,11 +471,13 @@ class TestUtilityFunctions:
             organization=self.organization_active,
             status="active",
             created_by=self.user,  # User is the creator
-            updated_by=self.user
+            updated_by=self.user,
         )
-        
+
         # User should have access by being the creator
-        result = check_if_user_has_authorized_category_access(appointment.id, self.user, check_creator=True)
+        result = check_if_user_has_authorized_category_access(
+            appointment.id, self.user, check_creator=True
+        )
         assert result is True
 
     def test_check_no_access(self):
@@ -442,7 +491,7 @@ class TestUtilityFunctions:
             status="active",
             type="unauthorized",
             created_by=self.user,
-            group=group
+            group=group,
         )
         appointment = Appointment.objects.create(
             user=self.other_user,
@@ -450,7 +499,7 @@ class TestUtilityFunctions:
             organization=self.organization_active,
             status="active",
             created_by=self.other_user,
-            updated_by=self.user
+            updated_by=self.user,
         )
 
         # User should not have access (not creator or authorized for category)
@@ -465,11 +514,13 @@ class TestUtilityFunctions:
             organization=self.organization_active,
             status="active",
             created_by=self.user,  # User is the creator
-            updated_by=self.user
+            updated_by=self.user,
         )
 
         # User should still have access via category authorization even if check_creator=False
-        result = check_if_user_has_authorized_category_access(appointment.id, self.user, check_creator=False)
+        result = check_if_user_has_authorized_category_access(
+            appointment.id, self.user, check_creator=False
+        )
         assert result is True
 
     def test_check_appointment_not_found(self):
@@ -480,8 +531,12 @@ class TestUtilityFunctions:
 
     def test_set_appointment_status_success(self):
         """Test updating appointment status with a valid choice."""
-        new_status = "checkin"  # Assuming 'completed' is a valid status in STATUS_CHOICES
-        success, message = set_appointment_status(self.unscheduled_appointment_1.id, new_status, self.user)
+        new_status = (
+            "checkin"  # Assuming 'completed' is a valid status in STATUS_CHOICES
+        )
+        success, message = set_appointment_status(
+            self.unscheduled_appointment_1.id, new_status, self.user
+        )
 
         assert success is True
         assert message == f"Appointment status updated to '{new_status}' successfully."
@@ -494,7 +549,9 @@ class TestUtilityFunctions:
     def test_set_appointment_status_invalid_status(self):
         """Test updating appointment status with an invalid choice."""
         invalid_status = "invalid_status"
-        success, message = set_appointment_status(self.unscheduled_appointment_1.id, invalid_status, self.user)
+        success, message = set_appointment_status(
+            self.unscheduled_appointment_1.id, invalid_status, self.user
+        )
 
         assert success is False
         assert message == "Invalid status choice."
@@ -507,7 +564,9 @@ class TestUtilityFunctions:
         """Test updating status when appointment does not exist."""
         non_existent_id = 9999  # An ID that does not exist in the database
         new_status = "checkin"
-        success, message = set_appointment_status(non_existent_id, new_status, self.user)
+        success, message = set_appointment_status(
+            non_existent_id, new_status, self.user
+        )
 
         assert success is False
         assert message == "Appointment does not exist."

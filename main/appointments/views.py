@@ -1,5 +1,4 @@
-from main.appointments.service import handle_appointment_scheduling
-from main.appointments.utils import update_appointment
+from main.appointments.service import handle_appointment_scheduling, move_appointment
 from main.service import (
     get_scheduled_appointments_for_superuser,
     get_scheduled_appointments_for_user,
@@ -8,21 +7,21 @@ from main.service import (
     get_user_appointments,
     set_appointment_status,
 )
-from main.verification.utils import check_if_user_is_authorized, check_user_in_group
 from rest_framework.permissions import IsAuthenticated
 
 from rest_framework import generics, viewsets
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.decorators import action
-from main.models import Appointment, Category, Organization, User
+from main.models import Appointment, Organization
 from main.appointments.serializers import (
     AppointmentIDValidatorSerializer,
     AppointmentSerializer,
     MakeAppointmentSerializer,
+    MoveAppointmentIDValidatorSerializer,
     OrganizationSerializer,
     ValidateAppointmentInput,
-    AppointmentListQueryParamsSerializer
+    AppointmentListQueryParamsSerializer,
 )
 from rest_framework.pagination import PageNumberPagination
 
@@ -41,19 +40,19 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         """Returns list of all User appointments.
-        
+
         ?status_filter=all (default)
         ?status_filter=scheduled
         ?status_filter=unscheduled
-        
+
         """
         user = self.request.user
-        status_filter = request.query_params.get('status_filter', 'all')
+        status_filter = request.query_params.get("status_filter", "all")
 
         # Retrieve appointments based on the filter
-        if status_filter == 'scheduled':
+        if status_filter == "scheduled":
             appointments = get_user_appointments(user, is_scheduled=True)
-        elif status_filter == 'unscheduled':
+        elif status_filter == "unscheduled":
             appointments = get_user_appointments(user, is_scheduled=False)
         else:
             appointments = get_user_appointments(user)  # 'all' or invalid value
@@ -70,27 +69,33 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], url_path="scheduled")
     def list_scheduled(self, request):
         """List scheduled appointments for a user or superuser.
-        
+
         if super_user or staff (very few users who control the application)
             Will be able to see all Appointments in the APP!
         else: Users that are Group Admin may have groups assigned to them.
             User
                 - Groups: [Tim Hortons] - This group admin will be able to see all appointments under Tim Hortons.
-        
+
         ** Recommended one group assigned to each user
 
         /appointments/scheduled/?category_id=1&category_id=2&category_id=3
         """
         user = self.request.user
 
-        query_params_serializer = AppointmentListQueryParamsSerializer(data=request.query_params)
+        query_params_serializer = AppointmentListQueryParamsSerializer(
+            data=request.query_params
+        )
         query_params_serializer.is_valid(raise_exception=True)
         category_ids = query_params_serializer.validated_data.get("category_id", [])
 
         if user.is_superuser or user.is_staff:
-            scheduled_appointments = get_scheduled_appointments_for_superuser(category_ids=category_ids)
+            scheduled_appointments = get_scheduled_appointments_for_superuser(
+                category_ids=category_ids
+            )
         else:
-            scheduled_appointments = get_scheduled_appointments_for_user(user, category_ids=category_ids)
+            scheduled_appointments = get_scheduled_appointments_for_user(
+                user, category_ids=category_ids
+            )
 
         # Paginate the queryset using StandardResultsSetPagination
         page = self.paginate_queryset(scheduled_appointments)
@@ -104,7 +109,7 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], url_path="unscheduled")
     def list_unscheduled(self, request):
         """List unscheduled appointments for a user or superuser.
-        
+
         if super_user or staff (very few users who control the application)
             Will be able to see all Appointments in the APP!
         else: Users that are Group Admin may have groups assigned to them.
@@ -116,14 +121,20 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         """
         user = self.request.user
 
-        query_params_serializer = AppointmentListQueryParamsSerializer(data=request.query_params)
+        query_params_serializer = AppointmentListQueryParamsSerializer(
+            data=request.query_params
+        )
         query_params_serializer.is_valid(raise_exception=True)
         category_ids = query_params_serializer.validated_data.get("category_id", [])
 
         if user.is_superuser or user.is_staff:
-            unscheduled_appointments = get_unscheduled_appointments_for_superuser(category_ids=category_ids)
+            unscheduled_appointments = get_unscheduled_appointments_for_superuser(
+                category_ids=category_ids
+            )
         else:
-            unscheduled_appointments = get_unscheduled_appointments_for_user(user, category_ids=category_ids)
+            unscheduled_appointments = get_unscheduled_appointments_for_user(
+                user, category_ids=category_ids
+            )
 
         # Paginate the queryset using StandardResultsSetPagination
         page = self.paginate_queryset(unscheduled_appointments)
@@ -166,7 +177,6 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         )
         serializer.is_valid(raise_exception=True)
 
-
         # Check if appointment is scheduled
         if not input_serializer.validated_data.get("is_scheduled"):
             counter, error_message = handle_appointment_scheduling(
@@ -201,18 +211,21 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         """
 
         # Validate appointment ID from query parameters
-        query_params_serializer = AppointmentIDValidatorSerializer(data={"appointment_id": pk}, context={"request": request})
+        query_params_serializer = AppointmentIDValidatorSerializer(
+            data={"appointment_id": pk}, context={"request": request}
+        )
         query_params_serializer.is_valid(raise_exception=True)
-        appointment_id = query_params_serializer.validated_data['appointment_id']
+        appointment_id = query_params_serializer.validated_data["appointment_id"]
 
         # Set appointment status to "checkin"
-        success, message = set_appointment_status(appointment_id, "checkin", self.request.user)
+        success, message = set_appointment_status(
+            appointment_id, "checkin", self.request.user
+        )
 
         if success:
             return Response({"detail": message}, status=status.HTTP_200_OK)
         else:
             return Response({"errors": message}, status=status.HTTP_400_BAD_REQUEST)
-        
 
     @action(detail=True, methods=["post"], url_path="cancel")
     def cancel(self, request, pk=None):
@@ -227,67 +240,53 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         """
 
         # Validate appointment ID from query parameters
-        query_params_serializer = AppointmentIDValidatorSerializer(data={"appointment_id": pk}, context={"request": request, "check_creator": True})
+        query_params_serializer = AppointmentIDValidatorSerializer(
+            data={"appointment_id": pk},
+            context={"request": request, "check_creator": True},
+        )
         query_params_serializer.is_valid(raise_exception=True)
-        appointment_id = query_params_serializer.validated_data['appointment_id']
+        appointment_id = query_params_serializer.validated_data["appointment_id"]
 
         # Set appointment status to "cancel"
-        success, message = set_appointment_status(appointment_id, "cancel", self.request.user)
+        success, message = set_appointment_status(
+            appointment_id, "cancel", self.request.user
+        )
 
         if success:
             return Response({"detail": message}, status=status.HTTP_200_OK)
         else:
             return Response({"errors": message}, status=status.HTTP_400_BAD_REQUEST)
 
-
     @action(detail=True, methods=["post"], url_path="move")
     def move(self, request, pk=None):
-        previous_id = request.data.get("previous", None)
-        previous_counter = 0
-        # get organization from appointment
-        # check if the user is in organizations group (admin) else deny access
-        try:
-            appointment = self.get_queryset().get(pk=pk, status="active")
+        """Move Unscheduled appointment up/down.
 
-            # get group
-            group = appointment.organization.group
-            if not check_user_in_group(self.request.user, group):
-                return Response({"detail": "Unauthorized."}, status=status.HTTP_200_OK)
+        If moving to first position `previous_appointment_id` will be null.
+        Appointment will be moved behind the previous appointment.
 
-            # update the appointment thats being removed
-            update_appointment(
-                appointment, "inactive", current_counter=appointment.counter
-            )
+        Args:
+            pk (int): Appointmrnt ID.
 
-            if previous_id is None:
-                previous_appointment = Appointment.objects.filter(
-                    organization=appointment.organization.id,
-                    category=appointment.category.id,
-                    status="active",
-                    scheduled=False,
-                )
-                if previous_appointment:
-                    previous_appointment = previous_appointment.earliest("counter")
-                    previous_counter = previous_appointment.counter - 1
-                appointment.counter = previous_appointment.counter
-            else:
-                previous_appointment = self.get_queryset().get(pk=previous_id)
-                previous_counter = previous_appointment.counter
-                appointment.counter = previous_appointment.counter + 1
+        """
 
-            # Move the existing appointment forward by 1
-            update_appointment(
-                appointment, "active", increment=True, current_counter=previous_counter
-            )
+        # Validate appointment ID from query parameters
+        previous_appointment_id = request.data.get("previous_appointment_id")
 
-            appointment.status = "active"
-            appointment.save()
+        serializer = MoveAppointmentIDValidatorSerializer(
+            data={
+                "appointment_id": pk,
+                "previous_appointment_id": previous_appointment_id,
+            },
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
 
-            return Response({"detail": "Checked in successfully."})
-        except Appointment.DoesNotExist:
-            return Response(
-                {"detail": "Appointment not found."}, status=status.HTTP_404_NOT_FOUND
-            )
+        previous_appointment_id = serializer.validated_data["previous_appointment_id"]
+        current_appointment_id = serializer.validated_data["appointment_id"]
+
+        move_appointment(current_appointment_id, previous_appointment_id)
+
+        return Response({}, status=status.HTTP_200_OK)
 
 
 class OrganizationListCreateView(generics.ListCreateAPIView):

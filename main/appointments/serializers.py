@@ -1,18 +1,27 @@
-# in your app/serializers.py
-
-from main.service import check_category_is_active, check_if_user_has_authorized_category_access, check_organization_is_active, check_user_exists, are_valid_category_ids, get_appointment_by_id, get_authorized_categories_for_user
+from main.exceptions import UnauthorizedAccessException
+from main.service import (
+    check_category_is_active,
+    check_if_user_has_authorized_category_access,
+    check_organization_is_active,
+    check_user_exists,
+    are_valid_category_ids,
+    get_appointment_by_id,
+    get_authorized_categories_for_user,
+)
 from rest_framework import serializers, status
 from main.models import Appointment, Category, Organization
+
 
 class AppointmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Appointment
-        fields = '__all__'
+        fields = "__all__"
+
 
 class OrganizationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Organization
-        fields = '__all__'
+        fields = "__all__"
 
 
 class ValidateAppointmentInput(serializers.Serializer):
@@ -25,7 +34,9 @@ class ValidateAppointmentInput(serializers.Serializer):
         """Validate if the organization exists and is active using the service layer."""
         organization = check_organization_is_active(value)
         if not organization:
-            raise serializers.ValidationError("Organization does not exist or is not active.")
+            raise serializers.ValidationError(
+                "Organization does not exist or is not active."
+            )
         return value
 
     def validate_category(self, value):
@@ -33,7 +44,9 @@ class ValidateAppointmentInput(serializers.Serializer):
         category = check_category_is_active(value)
 
         if not category:
-            raise serializers.ValidationError("Category does not exist or is not active.")
+            raise serializers.ValidationError(
+                "Category does not exist or is not active."
+            )
         return value
 
     def validate_user(self, value):
@@ -45,12 +58,14 @@ class ValidateAppointmentInput(serializers.Serializer):
 
     def validate(self, attrs):
         """Additional validations that depend on multiple fields."""
-            
-        request_user = self.context['request'].user  # The user making the request
-        user_id = attrs.get('user')
-        category_id = attrs.get('category')
 
-        authorized_category_ids = get_authorized_categories_for_user(request_user).values_list('id', flat=True)
+        request_user = self.context["request"].user  # The user making the request
+        user_id = attrs.get("user")
+        category_id = attrs.get("category")
+
+        authorized_category_ids = get_authorized_categories_for_user(
+            request_user
+        ).values_list("id", flat=True)
         is_user_authorized_for_category = category_id in authorized_category_ids
 
         if (
@@ -59,9 +74,10 @@ class ValidateAppointmentInput(serializers.Serializer):
             and not request_user.is_superuser
             and not is_user_authorized_for_category
         ):
-            raise serializers.ValidationError("You are not allowed to create an appointment for this user.")
+            raise UnauthorizedAccessException(
+                detail="Unauthorized to access this appointment."
+            )
 
-        
         return attrs
 
 
@@ -74,14 +90,23 @@ class MakeAppointmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Appointment
-        fields = ['id', 'user', 'category', 'type', 'organization', 'status', 'date_created', 'counter', 'is_scheduled', 'estimated_time']
-        
+        fields = [
+            "id",
+            "user",
+            "category",
+            "type",
+            "organization",
+            "status",
+            "date_created",
+            "counter",
+            "is_scheduled",
+            "estimated_time",
+        ]
+
 
 class AppointmentListQueryParamsSerializer(serializers.Serializer):
     category_id = serializers.ListField(
-        child=serializers.IntegerField(),
-        required=False,
-        allow_empty=True
+        child=serializers.IntegerField(), required=False, allow_empty=True
     )
 
     def validate_category_id(self, value):
@@ -89,17 +114,18 @@ class AppointmentListQueryParamsSerializer(serializers.Serializer):
         if not value:
             return value
         if len(value) > 10:
-            raise serializers.ValidationError("You can only filter by a maximum of 10 category IDs.")
-        
+            raise serializers.ValidationError(
+                "You can only filter by a maximum of 10 category IDs."
+            )
+
         # Validate category IDs using the service method
         if not are_valid_category_ids(value):
             raise serializers.ValidationError("One or more category IDs are invalid.")
 
         return value
 
-    
 
-class AppointmentIDValidatorSerializer(serializers.Serializer):
+class BaseAppointmentIDValidatorSerializer(serializers.Serializer):
     """Serializer to validate if an appointment with a given ID exists and if the user has access to it."""
 
     appointment_id = serializers.IntegerField()
@@ -115,10 +141,50 @@ class AppointmentIDValidatorSerializer(serializers.Serializer):
         if user.is_staff or user.is_superuser:
             return attrs
 
-        response = check_if_user_has_authorized_category_access(appointment_id, user, check_creator)
+        response = check_if_user_has_authorized_category_access(
+            appointment_id, user, check_creator
+        )
         if response is None:
-            raise serializers.ValidationError("Appointment with this ID does not exist.")
+            raise serializers.ValidationError(
+                "Appointment with this ID does not exist."
+            )
         elif response is False:
-            raise serializers.ValidationError("Unauthorized to access this appointment.", code=status.HTTP_403_FORBIDDEN)
-
+            raise UnauthorizedAccessException(
+                detail="Unauthorized to access this appointment."
+            )
         return attrs  # Proceed if the user is authorized and appointment exists
+
+
+class AppointmentIDValidatorSerializer(BaseAppointmentIDValidatorSerializer):
+    """Serializer to validate appointment_id with Base logic."""
+
+    pass  # Inherits everything from BaseAppointmentIDValidatorSerializer
+
+
+class MoveAppointmentIDValidatorSerializer(BaseAppointmentIDValidatorSerializer):
+    """Serializer for moving an appointment, includes optional previous_appointment_id."""
+
+    previous_appointment_id = serializers.IntegerField(allow_null=True)
+
+    def validate(self, attrs):
+        """Extend validation to optionally include previous_appointment_id."""
+        # Call parent validation
+        attrs = super().validate(attrs)
+
+        # Custom validation for previous_appointment_id
+        previous_appointment_id = attrs.get("previous_appointment_id")
+
+        if previous_appointment_id is not None:
+            if attrs.get("appointment_id") == previous_appointment_id:
+                raise serializers.ValidationError(
+                    "The current appointment ID cannot be the same as the previous appointment ID."
+                )
+
+            # Retrieve the specific appointment by ID
+            previous_appointment = get_appointment_by_id(previous_appointment_id)
+            if previous_appointment is None:
+                raise serializers.ValidationError(
+                    "Appointment with this ID does not exist."
+                )
+
+        return attrs

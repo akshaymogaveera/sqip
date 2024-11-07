@@ -213,3 +213,23 @@ Sample Response:
 }
 ```
 ------------------------------------------------------------------------------------------------
+
+> Move Appointment
+
+URL: ```/api/appointments/<appointment_id>/move/``` (POST)
+
+Request Body
+```
+{
+    "previous_appointment_id": 2
+}
+
+If moving to first position `previous_appointment_id` will be null.
+
+```
+
+Sample Response:
+```
+{}
+```
+------------------------------------------------------------------------------------------------
