@@ -233,3 +233,102 @@ Sample Response:
 {}
 ```
 ------------------------------------------------------------------------------------------------
+
+> Get Organization
+
+URL: ```api/organizations/<organization_id>/``` (GET)
+
+
+Sample Response:
+```
+{
+    "id": 1,
+    "name": "Arfa",
+    "created_by": 1,
+    "portfolio_site": "",
+    "display_picture": null,
+    "city": "Mumbai",
+    "state": "Maharashtra",
+    "country": "India",
+    "type": "restaurant",
+    "status": "active",
+    "groups": [
+        1
+    ]
+}
+```
+------------------------------------------------------------------------------------------------
+
+> List Organization
+
+For all appointments:
+    URL: ```api/organizations/``` (GET)
+for active appointments:
+    URL: ```api/organizations/active/``` (GET)
+
+### Filter Examples
+- `?status=active` - Filters organizations by status.
+- `?type=clinic` - Filters organizations by type, such as `clinic`.
+- `?city=New York` - Case-insensitive search by city name containing `New York`.
+- `?country=Canada` - Case-insensitive search by country containing `Canada`.
+- `?name=Arteria` - Case-insensitive search by organization name containing `Arteria`.
+
+### Search Example
+- `?search=tech` - Searches across name, city, state, country, and type fields for matches with `tech`.
+
+### Ordering Examples
+- `?ordering=name` - Orders organizations by name (ascending).
+- `?ordering=-name` - Orders organizations by name (descending).
+- `?ordering=city` - Orders organizations by city.
+- `?ordering=state,-country` - Orders organizations by state (ascending) and country (descending).
+
+### Pagination Examples
+- `?page=1` - Returns the first page of results.
+- `?page_size=5` - Adjusts the number of items per page (default is 10, maximum is 100).
+
+### Endpoint Examples
+- **Retrieve specific organization by ID**: `/organizations/<id>/`
+- **List organizations with filters, search, and pagination**: `/organizations/?status=active&type=clinic&city=New York`
+- **Custom action for active organizations**: `/organizations/active/` (lists organizations with `status=active`)
+
+Sample Response:
+```
+{
+    "count": 2,
+    "next": null,
+    "previous": null,
+    "results": [
+        {
+            "id": 1,
+            "name": "Arfa",
+            "created_by": 1,
+            "portfolio_site": "",
+            "display_picture": null,
+            "city": "Mumbai",
+            "state": "Maharashtra",
+            "country": "India",
+            "type": "restaurant",
+            "status": "active",
+            "groups": [
+                1
+            ]
+        },
+        {
+            "id": 2,
+            "name": "Arteria AI",
+            "created_by": 1,
+            "portfolio_site": "",
+            "display_picture": null,
+            "city": "Toronto",
+            "state": "ON",
+            "country": "Canada",
+            "type": "company",
+            "status": "active",
+            "groups": [
+                2
+            ]
+        }
+    ]
+}
+```
+------------------------------------------------------------------------------------------------
