@@ -60,6 +60,7 @@ class Category(models.Model):
         blank=True,
         null=True,
     )
+    name = models.CharField(max_length=255, blank=True, null=True)
     organization = models.ForeignKey(Organization, on_delete=models.PROTECT)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)

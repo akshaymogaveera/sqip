@@ -1,6 +1,7 @@
 from django.urls import path, include
 
 from main.appointments.views import AppointmentListCreateView
+from main.category.views import CategoryViewSet
 from main.organization.views import OrganizationViewSet
 from .login import views
 from rest_framework_simplejwt import views as jwt_views
@@ -9,6 +10,7 @@ from rest_framework.routers import DefaultRouter
 router = DefaultRouter()
 router.register(r'api/appointments', AppointmentListCreateView, basename='appointments')
 router.register(r'api/organizations', OrganizationViewSet, basename='organizations')
+router.register(r'api/categories', CategoryViewSet, basename='categories')
 
 urlpatterns = [
     path('', views.index, name='index'),

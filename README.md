@@ -261,9 +261,9 @@ Sample Response:
 
 > List Organization
 
-For all appointments:
+For all organizations:
     URL: ```api/organizations/``` (GET)
-for active appointments:
+for active organizations:
     URL: ```api/organizations/active/``` (GET)
 
 ### Filter Examples
@@ -332,3 +332,72 @@ Sample Response:
 }
 ```
 ------------------------------------------------------------------------------------------------
+
+> List Category
+
+For all categories:
+    URL: ```api/categories/``` (GET)
+for active categories:
+    URL: ```api/categories/active/``` (GET)
+
+
+### Filter Examples
+- `?status=active` - Filters categories by status.
+- `?type=general` - Filters categories by type, such as `general`.
+- `?description=consultation` - Case-insensitive search by description containing `consultation`.
+- `?organization=<organization_id>` - Filters categories by a specific organization ID.
+- `?organization=<org_id1>,<org_id2>` - Filters categories by a list of organization IDs.
+
+### Search Example
+- `?search=general` - Searches within description field for matches with `general`.
+
+### Ordering Examples
+- `?ordering=created_at` - Orders categories by creation date (ascending).
+- `?ordering=-status` - Orders categories by status (descending).
+
+### Pagination Examples
+- `?page=1` - Returns the first page of results.
+- `?page_size=5` - Adjusts the number of items per page (default is 10, maximum is 100).
+
+### Endpoint Examples
+- **Retrieve specific category by ID**: `/categories/<id>/`
+- **List categories with filters, search, and pagination**: `/categories/?status=active&type=general&description=consultation`
+- **List categories filtered by organization ID**: `/categories/?organization=1`
+- **List categories filtered by multiple organization IDs**: `/categories/?organization=1,2,3`
+- **Custom action for active categories**: `/categories/active/` (lists categories with `status=active`)
+
+
+Sample Response:
+```
+{
+    "count": 2,
+    "next": null,
+    "previous": null,
+    "results": [
+        {
+            "id": 4,
+            "name": null,
+            "status": "active",
+            "type": "general",
+            "estimated_time": null,
+            "description": "Walk in",
+            "created_at": "2024-11-15T03:14:50Z",
+            "group": 4,
+            "organization": 3,
+            "created_by": 2
+        },
+        {
+            "id": 5,
+            "name": null,
+            "status": "active",
+            "type": "inperson",
+            "estimated_time": null,
+            "description": "Drive thru",
+            "created_at": "2024-11-15T03:17:07Z",
+            "group": 5,
+            "organization": 3,
+            "created_by": 2
+        }
+    ]
+}
+```
