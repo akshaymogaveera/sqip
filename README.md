@@ -401,3 +401,23 @@ Sample Response:
     ]
 }
 ```
+
+------------------------------------------------------------------------------------------------
+
+> List Categories under User
+
+> Group("Tims")
+    > user.groups = [Group("Tims")]
+> Category("Tims")
+    > category.group = Group("Tims")
+
+URL: ```api/categories/user/``` (GET)
+
+Can use filter same as above
+?status=active
+
+
+Sample Response:
+```
+ SAME AS ABOVE
+```
