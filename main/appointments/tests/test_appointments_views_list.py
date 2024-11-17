@@ -155,6 +155,14 @@ class TestListScheduledAppointments:
             created_by=self.user,
         )
 
+        self.category3 = Category.objects.create(
+            organization=self.organization,
+            status="drive-thru",
+            type="inperson",
+            created_by=self.user,
+        )
+
+
         self.appointment1 = Appointment.objects.create(
             user=self.user,
             organization=self.organization,
@@ -170,6 +178,14 @@ class TestListScheduledAppointments:
             status="active",
         )
 
+        self.appointment3 = Appointment.objects.create(
+            user=self.user,
+            organization=self.organization,
+            category=self.category3,
+            is_scheduled=True,
+            status="active",
+        )
+
         # Unscheduled appointments
         self.unscheduled_appointment = Appointment.objects.create(
             user=self.user,
@@ -181,7 +197,7 @@ class TestListScheduledAppointments:
 
     def test_list_scheduled_filter_by_multiple_category_ids(self):
         """Test filtering by multiple category_ids in list_scheduled."""
-        url = f"{reverse('appointments-list-scheduled')}?category_id[]={self.category1.id}&category_id[]={self.category2.id}"
+        url = f"{reverse('appointments-list-scheduled')}?category_id={self.category1.id}&category_id={self.category2.id}"
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 2  # Should return both appointments
@@ -230,7 +246,7 @@ class TestListScheduledAppointments:
         url = reverse("appointments-list-scheduled")
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data["results"]) == 2
+        assert len(response.data["results"]) == 3
 
     def test_list_scheduled_regular_user_access(self):
         """Test regular user with no admin rights can only access their own appointments."""
@@ -376,6 +392,13 @@ class TestListUnscheduledAppointments:
             created_by=self.user,
         )
 
+        self.category3 = Category.objects.create(
+            organization=self.organization,
+            status="active",
+            type="drive-thru",
+            created_by=self.user,
+        )
+
         # Unscheduled appointments
         self.unscheduled_appointment1 = Appointment.objects.create(
             user=self.user,
@@ -392,8 +415,16 @@ class TestListUnscheduledAppointments:
             status="active",
         )
 
+        self.appointment3 = Appointment.objects.create(
+            user=self.user,
+            organization=self.organization,
+            category=self.category3,
+            is_scheduled=False,
+            status="active",
+        )
+
         # scheduled appointments
-        self.unscheduled_appointment = Appointment.objects.create(
+        self.scheduled_appointment = Appointment.objects.create(
             user=self.user,
             organization=self.organization,
             category=self.category1,
@@ -474,7 +505,7 @@ class TestListUnscheduledAppointments:
 
     def test_list_unscheduled_filter_by_multiple_category_ids(self):
         """Test filtering by multiple category_ids in unscheduled list."""
-        url = f"{reverse('appointments-list-unscheduled')}?category_id[]={self.category1.id}&category_id[]={self.category2.id}"
+        url = f"{reverse('appointments-list-unscheduled')}?category_id={self.category1.id}&category_id={self.category2.id}"
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert (

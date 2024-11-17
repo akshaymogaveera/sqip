@@ -91,7 +91,7 @@ def get_authorized_categories_for_user(user):
 def get_unscheduled_appointments_for_user(user, category_ids=None):
     """Retrieve unscheduled appointments for a non-superuser, optionally filtering by category IDs."""
     authorized_categories = get_authorized_categories_for_user(user)
-    # If the user has no authorized organizations, return their appointments only
+    # If the user has no authorized categories, return their appointments only
     if not authorized_categories:
         queryset = get_user_appointments(user=user, is_scheduled=False)
 
