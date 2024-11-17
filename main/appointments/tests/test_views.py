@@ -375,6 +375,28 @@ class TestMakeAppointment:
         self.appointment.refresh_from_db()
         assert self.appointment.status == "checkin"
 
+    def test_check_in_if_inactive_success(self):
+        """Test successfully checking in to an appointment."""
+
+        new_appt = Appointment.objects.create(
+            organization=self.organization,
+            category=self.category_1,
+            user=self.user,
+            status="inactive",
+            created_by=self.user,
+            updated_by=self.user,
+        )
+        url = reverse("appointments-check-in", args=[new_appt.id])
+
+        response = self.client.post(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert (
+            response.json()["detail"]
+            == "Appointment status updated to 'checkin' successfully."
+        )
+        new_appt.refresh_from_db()
+        assert new_appt.status == "checkin"
+
     def test_check_in_if_appt_creator(self):
         """Test check-in with an unauthorized user."""
         new_user = User.objects.create_user(
@@ -412,6 +434,28 @@ class TestMakeAppointment:
         )
         self.appointment.refresh_from_db()
         assert self.appointment.status == "cancel"
+
+    def test_cancel_if_inactive_success(self):
+        """Test successfully cancel in to an appointment."""
+
+        new_appt = Appointment.objects.create(
+            organization=self.organization,
+            category=self.category_1,
+            user=self.user,
+            status="inactive",
+            created_by=self.user,
+            updated_by=self.user,
+        )
+        url = reverse("appointments-cancel", args=[new_appt.id])
+
+        response = self.client.post(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert (
+            response.json()["detail"]
+            == "Appointment status updated to 'cancel' successfully."
+        )
+        new_appt.refresh_from_db()
+        assert new_appt.status == "cancel"
 
     def test_cancel_if_appt_creator(self):
         """Test cancel with an unauthorized user."""

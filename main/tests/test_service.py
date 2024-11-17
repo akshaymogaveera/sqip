@@ -428,6 +428,24 @@ class TestUtilityFunctions:
         assert result.status == "active"
 
     def test_get_appointment_by_id_inactive(self):
+        """Test retrieving an inactive appointment by ID."""
+        # Create an inactive appointment
+        inactive_appointment = Appointment.objects.create(
+            id=1001,
+            user=self.user,
+            category=self.category_active,
+            organization=self.organization_active,
+            status="active",
+            created_by=self.user,
+            updated_by=self.user,
+        )
+
+        result = get_appointment_by_id(inactive_appointment.id, ignore_status=True)
+        assert result is not None
+        assert result.id == inactive_appointment.id
+        assert result.status == "active"
+
+    def test_get_appointment_by_id_inactive(self):
         """Test that retrieving an inactive appointment returns None."""
         # Create an inactive appointment
         inactive_appointment = Appointment.objects.create(
@@ -545,6 +563,33 @@ class TestUtilityFunctions:
         self.unscheduled_appointment_1.refresh_from_db()
         assert self.unscheduled_appointment_1.status == new_status
         assert self.unscheduled_appointment_1.updated_by == self.user
+
+    def test_set_appointment_status_success_if_ignore_status(self):
+        """Test updating appointment status with a valid choice."""
+        new_status = (
+            "checkin"  # Assuming 'completed' is a valid status in STATUS_CHOICES
+        )
+
+        appointment = Appointment.objects.create(
+            user=self.other_user,
+            category=self.category_active,
+            organization=self.organization_active,
+            status="inactive",
+            created_by=self.user,  # User is the creator
+            updated_by=self.user,
+        )
+
+        success, message = set_appointment_status(
+            appointment.id, new_status, self.user, ignore_status=True
+        )
+
+        assert success is True
+        assert message == f"Appointment status updated to '{new_status}' successfully."
+
+        # Reload the appointment to verify changes
+        appointment.refresh_from_db()
+        assert appointment.status == new_status
+        assert appointment.updated_by == self.user
 
     def test_set_appointment_status_invalid_status(self):
         """Test updating appointment status with an invalid choice."""

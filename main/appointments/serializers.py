@@ -108,8 +108,16 @@ class AppointmentListQueryParamsSerializer(serializers.Serializer):
     category_id = serializers.ListField(
         child=serializers.IntegerField(), required=False, allow_empty=True
     )
+    status = serializers.ChoiceField(
+        choices=Appointment.STATUS_CHOICES, required=False
+    )
 
     def validate_category_id(self, value):
+        """Validate category id.
+
+        Raises:
+            serializers.ValidationError
+        """
         # Validate the list length
         if not value:
             return value
@@ -122,6 +130,13 @@ class AppointmentListQueryParamsSerializer(serializers.Serializer):
         if not are_valid_category_ids(value):
             raise serializers.ValidationError("One or more category IDs are invalid.")
 
+        return value
+
+    def validate_status(self, value):
+        """Validate Status"""
+        # If a status is provided, check it's a valid status choice
+        if value and value not in dict(Appointment.STATUS_CHOICES).keys():
+            raise serializers.ValidationError(f"Invalid status: {value}")
         return value
 
 
@@ -142,7 +157,7 @@ class BaseAppointmentIDValidatorSerializer(serializers.Serializer):
             return attrs
 
         response = check_if_user_has_authorized_category_access(
-            appointment_id, user, check_creator
+            appointment_id, user, check_creator, ignore_status=True
         )
         if response is None:
             raise serializers.ValidationError(

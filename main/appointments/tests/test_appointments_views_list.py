@@ -56,6 +56,14 @@ class TestListUserAppointments:
             status="active",
         )
 
+        self.checkin_appointment = Appointment.objects.create(
+            user=self.user,
+            organization=self.organization,
+            category=self.category,
+            is_scheduled=False,
+            status="checkin",
+        )
+
     def test_list_user_appointments_all(self):
         """Test retrieving all user appointments."""
         url = reverse("appointments-list")  # Adjust URL name as necessary
@@ -65,7 +73,7 @@ class TestListUserAppointments:
 
     def test_list_user_appointments_scheduled(self):
         """Test retrieving only scheduled user appointments."""
-        url = reverse("appointments-list") + "?status_filter=scheduled"
+        url = reverse("appointments-list") + "?type=scheduled"
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert (
@@ -74,16 +82,16 @@ class TestListUserAppointments:
 
     def test_list_user_appointments_unscheduled(self):
         """Test retrieving only unscheduled user appointments."""
-        url = reverse("appointments-list") + "?status_filter=unscheduled"
+        url = reverse("appointments-list") + "?type=unscheduled"
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert (
             response.json().get("count") == 1
         )  # Should return only the unscheduled appointment
 
-    def test_list_user_appointments_invalid_status_filter(self):
-        """Test handling of invalid status_filter value."""
-        url = reverse("appointments-list") + "?status_filter=invalid"
+    def test_list_user_appointments_invalid_type(self):
+        """Test handling of invalid type value."""
+        url = reverse("appointments-list") + "?type=invalid"
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert (
@@ -186,6 +194,14 @@ class TestListScheduledAppointments:
             status="active",
         )
 
+        Appointment.objects.create(
+            user=self.user,
+            organization=self.organization,
+            category=self.category3,
+            is_scheduled=True,
+            status="inactive",
+        )
+
         # Unscheduled appointments
         self.unscheduled_appointment = Appointment.objects.create(
             user=self.user,
@@ -201,6 +217,18 @@ class TestListScheduledAppointments:
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 2  # Should return both appointments
+
+    def test_list_user_appointments_scheduled_status_inactive(self):
+        """Test retrieving only inactive user appointments.
+        
+        # Will ignore status, if regular user.
+        """
+        url = reverse("appointments-list-scheduled") + "?status=inactive"
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert (
+            response.json().get("count") == 3
+        )
 
     def test_list_scheduled_superuser_access(self):
         """Test superuser can access all scheduled appointments."""
@@ -336,6 +364,15 @@ class TestListScheduledAppointments:
             estimated_time="2024-12-31T10:00:00Z",  # Example future time
         )
 
+        Appointment.objects.create(
+            user=self.user,
+            category=category,
+            organization=organization,
+            is_scheduled=True,
+            status="inactive",
+            estimated_time="2024-12-31T10:00:00Z",  # Example future time
+        )
+
         # Make a request to the list_scheduled endpoint
         url = reverse("appointments-list-scheduled")
         response = self.client.get(url)
@@ -343,6 +380,13 @@ class TestListScheduledAppointments:
         # Check if the response status is OK and contains the expected appointment
         assert response.status_code == status.HTTP_200_OK
         assert len(response.json().get("results")) == 1
+
+        url = reverse("appointments-list-scheduled") + "?status=inactive"
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert (
+            response.json().get("count") == 1
+        )
 
     def teardown_method(self):
         """Clean up after each test."""
@@ -432,6 +476,14 @@ class TestListUnscheduledAppointments:
             status="active",
         )
 
+        Appointment.objects.create(
+            user=self.user,
+            organization=self.organization,
+            category=self.category3,
+            is_scheduled=False,
+            status="checkin",
+        )
+
     def test_list_unscheduled_with_group_access(self):
         """Test that a user can see unscheduled appointments if they belong to the group."""
         # Create a new user and assign them to the group
@@ -457,6 +509,14 @@ class TestListUnscheduledAppointments:
             status="active",
         )
 
+        Appointment.objects.create(
+            user=self.user,
+            category=self.category1,
+            organization=self.organization,
+            is_scheduled=False,  # Unscheduled appointment
+            status="checkin",
+        )
+
         # Make a request to the unscheduled endpoint
         url = reverse("appointments-list-unscheduled")
         response = self.client.get(url)
@@ -466,6 +526,22 @@ class TestListUnscheduledAppointments:
         assert (
             len(response.data["results"]) == 2
         )  # Should return all unscheduled appointments
+
+        url = reverse("appointments-list-unscheduled") + "?status=checkin"
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert (
+            response.json().get("count") == 1
+        )
+
+    def test_list_user_appointments_unscheduled_status_checkin(self):
+        """Test retrieving only unscheduled user appointments. should ignore status if regular user"""
+        url = reverse("appointments-list-unscheduled") + "?status=checkin"
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert (
+            response.json().get("count") == 3
+        )
 
     def test_list_unscheduled_invalid_category_id(self):
         """Test filtering by an invalid category_id returns no appointments."""

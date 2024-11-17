@@ -41,18 +41,18 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         """Returns list of all User appointments.
 
-        ?status_filter=all (default)
-        ?status_filter=scheduled
-        ?status_filter=unscheduled
+        ?type=all (default)
+        ?type=scheduled
+        ?type=unscheduled
 
         """
         user = self.request.user
-        status_filter = request.query_params.get("status_filter", "all")
+        status_type = request.query_params.get("type", "all")
 
         # Retrieve appointments based on the filter
-        if status_filter == "scheduled":
+        if status_type == "scheduled":
             appointments = get_user_appointments(user, is_scheduled=True)
-        elif status_filter == "unscheduled":
+        elif status_type == "unscheduled":
             appointments = get_user_appointments(user, is_scheduled=False)
         else:
             appointments = get_user_appointments(user)  # 'all' or invalid value
@@ -79,6 +79,12 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         ** Recommended one group assigned to each user
 
         /appointments/scheduled/?category_id=1&category_id=2&category_id=3
+
+        ** Filter by status
+        ?status=active (default)
+        ?status=checkin
+        ?status=inactive
+
         """
         user = self.request.user
 
@@ -87,14 +93,15 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         )
         query_params_serializer.is_valid(raise_exception=True)
         category_ids = query_params_serializer.validated_data.get("category_id", [])
+        status = query_params_serializer.validated_data.get("status", "active")
 
         if user.is_superuser or user.is_staff:
             scheduled_appointments = get_scheduled_appointments_for_superuser(
-                category_ids=category_ids
+                category_ids=category_ids, status=status
             )
         else:
             scheduled_appointments = get_scheduled_appointments_for_user(
-                user, category_ids=category_ids
+                user, category_ids=category_ids, status=status
             )
 
         # Paginate the queryset using StandardResultsSetPagination
@@ -118,6 +125,11 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         ** Recommended one group assigned to each user
 
         /appointments/unscheduled/?category_id=1&category_id=2&category_id=3
+
+        ** Filter by status
+        ?status=active (default)
+        ?status=checkin
+        ?status=inactive
         """
         user = self.request.user
 
@@ -126,14 +138,15 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         )
         query_params_serializer.is_valid(raise_exception=True)
         category_ids = query_params_serializer.validated_data.get("category_id", [])
+        status = query_params_serializer.validated_data.get("status", "active")
 
         if user.is_superuser or user.is_staff:
             unscheduled_appointments = get_unscheduled_appointments_for_superuser(
-                category_ids=category_ids
+                category_ids=category_ids, status=status
             )
         else:
             unscheduled_appointments = get_unscheduled_appointments_for_user(
-                user, category_ids=category_ids
+                user, category_ids=category_ids, status=status
             )
 
         # Paginate the queryset using StandardResultsSetPagination
@@ -219,7 +232,7 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
 
         # Set appointment status to "checkin"
         success, message = set_appointment_status(
-            appointment_id, "checkin", self.request.user
+            appointment_id, "checkin", self.request.user, ignore_status=True
         )
 
         if success:
@@ -249,7 +262,7 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
 
         # Set appointment status to "cancel"
         success, message = set_appointment_status(
-            appointment_id, "cancel", self.request.user
+            appointment_id, "cancel", self.request.user, ignore_status=True
         )
 
         if success:
@@ -289,7 +302,3 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         return Response({}, status=status.HTTP_200_OK)
 
 
-class OrganizationListCreateView(generics.ListCreateAPIView):
-    permission_classes = (IsAuthenticated,)
-    queryset = Organization.objects.all()
-    serializer_class = OrganizationSerializer

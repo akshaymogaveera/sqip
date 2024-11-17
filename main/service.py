@@ -61,9 +61,9 @@ def get_last_counter_for_appointment(organization, category):
     )
 
 
-def get_user_appointments(user, is_scheduled=None):
+def get_user_appointments(user, is_scheduled=None, status="active"):
     """Retrieve active appointments for a user."""
-    queryset = Appointment.objects.filter(user=user, status="active")
+    queryset = Appointment.objects.filter(user=user, status=status)
     if is_scheduled is True:
         queryset = queryset.filter(is_scheduled=is_scheduled).order_by("estimated_time")
     elif is_scheduled is False:
@@ -72,10 +72,10 @@ def get_user_appointments(user, is_scheduled=None):
     return queryset
 
 
-def get_unscheduled_appointments_for_superuser(category_ids=None):
+def get_unscheduled_appointments_for_superuser(category_ids=None, status="active"):
     """Retrieve unscheduled active appointments for superuser."""
 
-    queryset = Appointment.objects.filter(is_scheduled=False, status="active")
+    queryset = Appointment.objects.filter(is_scheduled=False, status=status)
 
     if category_ids:
         queryset = queryset.filter(category__id__in=category_ids)
@@ -88,17 +88,17 @@ def get_authorized_categories_for_user(user):
     return Category.objects.filter(group__in=user.groups.all()).distinct()
 
 
-def get_unscheduled_appointments_for_user(user, category_ids=None):
+def get_unscheduled_appointments_for_user(user, category_ids=None, status="active"):
     """Retrieve unscheduled appointments for a non-superuser, optionally filtering by category IDs."""
     authorized_categories = get_authorized_categories_for_user(user)
-    # If the user has no authorized categories, return their appointments only
+    # If the user has no authorized categories, return user's appointments only
     if not authorized_categories:
         queryset = get_user_appointments(user=user, is_scheduled=False)
 
     else:
         queryset = Appointment.objects.filter(
             is_scheduled=False,
-            status="active",
+            status=status,
             category__in=authorized_categories,
         )
 
@@ -109,9 +109,9 @@ def get_unscheduled_appointments_for_user(user, category_ids=None):
     return queryset.order_by("counter")
 
 
-def get_scheduled_appointments_for_superuser(category_ids=None):
+def get_scheduled_appointments_for_superuser(category_ids=None, status="active"):
     """Retrieve scheduled active appointments for superuser, optionally filtering by category IDs."""
-    queryset = Appointment.objects.filter(is_scheduled=True, status="active")
+    queryset = Appointment.objects.filter(is_scheduled=True, status=status)
 
     if category_ids:
         queryset = queryset.filter(category__id__in=category_ids)
@@ -119,17 +119,17 @@ def get_scheduled_appointments_for_superuser(category_ids=None):
     return queryset.order_by("estimated_time")
 
 
-def get_scheduled_appointments_for_user(user, category_ids=None):
+def get_scheduled_appointments_for_user(user, category_ids=None, status="active"):
     """Retrieve scheduled appointments for a non-superuser, optionally filtering by category IDs."""
     authorized_categories = get_authorized_categories_for_user(user)
-    # If the user has no authorized organizations, return their appointments only
+    # If the user has no authorized organizations, return user's appointments only
     if not authorized_categories:
         queryset = get_user_appointments(user=user, is_scheduled=True)
 
     else:
         queryset = Appointment.objects.filter(
             is_scheduled=True,
-            status="active",
+            status=status,
             category__in=authorized_categories,
         )
 
@@ -140,23 +140,27 @@ def get_scheduled_appointments_for_user(user, category_ids=None):
     return queryset.order_by("estimated_time")
 
 
-def get_appointment_by_id(appointment_id):
+def get_appointment_by_id(appointment_id, status="active", ignore_status=False):
     """Retrieve an appointment by ID.
 
     Args:
         appointment_id (int): The ID of the appointment to retrieve.
+        status (str): Defaults to active.
+        ignore_status (bool): Ignore status
 
     Returns:
         Appointment: The appointment instance if found, None otherwise.
     """
     try:
-        return Appointment.objects.get(id=appointment_id, status="active")
+        if ignore_status:
+            return Appointment.objects.get(id=appointment_id)
+        return Appointment.objects.get(id=appointment_id, status=status)
     except Appointment.DoesNotExist:
         return None
 
 
 def check_if_user_has_authorized_category_access(
-    appointment_id, user, check_creator=False
+    appointment_id, user, check_creator=False, ignore_status=False
 ):
     """Check if a user has access to a specific appointment, either by category authorization or by being the creator.
 
@@ -164,12 +168,13 @@ def check_if_user_has_authorized_category_access(
         appointment_id (int): The ID of the appointment to check.
         user (User): The user whose access is being verified.
         check_creator (bool): If True, also check if the user is the creator of the appointment.
+        ignore_status (bool): Ignore status.
 
     Returns:
         bool: True if the user has access to the appointment, False if unauthorized, None if not found.
     """
     # Retrieve the specific appointment by ID
-    appointment = get_appointment_by_id(appointment_id)
+    appointment = get_appointment_by_id(appointment_id, ignore_status=ignore_status)
     if not appointment:
         return None  # Appointment not found
     # If check_creator is True, verify if the user is the creator of the appointment
@@ -182,13 +187,14 @@ def check_if_user_has_authorized_category_access(
     return appointment.category in authorized_categories
 
 
-def set_appointment_status(appointment_id, status, user):
+def set_appointment_status(appointment_id, status, user, ignore_status=False):
     """Set the status of an appointment and update the 'updated_by' field.
 
     Args:
         appointment_id (int): ID of the appointment to update.
         status (str): The new status to set for the appointment.
         user (User): The user making the update.
+        ignore_status (bool): Ignore appointment status
 
     Returns:
         tuple: (bool, str) indicating success and a message.
@@ -198,7 +204,7 @@ def set_appointment_status(appointment_id, status, user):
         return False, "Invalid status choice."
 
     # Use the helper function to retrieve the appointment
-    appointment = get_appointment_by_id(appointment_id)
+    appointment = get_appointment_by_id(appointment_id, ignore_status=ignore_status)
     if appointment is None:
         return False, "Appointment does not exist."
 

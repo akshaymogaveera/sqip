@@ -81,9 +81,9 @@ URL: ```/api/appointments/``` (GET)
 
 Query parameters
 ```
-        ?status_filter=all (default)
-        ?status_filter=scheduled
-        ?status_filter=unscheduled
+        ?type=all (default)
+        ?type=scheduled
+        ?type=unscheduled
 ```
 
 Sample Response:
@@ -129,6 +129,7 @@ URL: ```/api/appointments/unscheduled/``` (GET)
 Query parameters
 ```
     ?category_id=1&category_id=2&category_id=3 (filter by categories)
+    ?status=inactive (only for group admin)
 ```
 
 Sample Response:
@@ -162,6 +163,7 @@ URL: ```/api/appointments/scheduled/``` (GET)
 Query parameters
 ```
     ?category_id=1&category_id=2&category_id=3 (filter by categories)
+    ?status=inactive (only for group admin)
 ```
 
 Sample Response:
