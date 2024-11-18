@@ -1,6 +1,6 @@
 import pytest
 from main.models import Appointment, Category, Organization
-from main.appointments.service import handle_appointment_scheduling, move_appointment
+from main.appointments.service import handle_appointment_scheduling, move_appointment, activate_appointment
 from django.contrib.auth.models import User
 
 from main.service import adjust_appointment_counter
@@ -428,3 +428,134 @@ class TestAdjustAppointmentCounter:
         assert (
             counters == expected_counters
         ), f"Expected counters: {expected_counters}, but got: {counters}"
+
+
+
+@pytest.mark.django_db
+class TestActivateAppointment:
+    """
+    Test class for the `activate_appointment` function.
+    """
+
+    @pytest.fixture
+    def setup_appointments(self):
+        """
+        Fixture to set up appointments for testing.
+
+        Creates:
+            - User: Test user for creating appointments.
+            - Organization: Active organization for appointments.
+            - Category: Active category for appointments.
+            - Appointments: 
+                - Active scheduled appointment
+                - Inactive unscheduled appointment
+                - Already active appointment
+        """
+        self.user = User.objects.create_user(
+            username="testuser", password="testpassword"
+        )
+
+        organization = Organization.objects.create(
+            name="Test Organization", created_by=self.user, status="active"
+        )
+
+        category = Category.objects.create(
+            organization=organization, status="active", created_by=self.user
+        )
+
+        appointments = {
+            "active_scheduled": Appointment.objects.create(
+                organization=organization,
+                category=category,
+                status="active",
+                counter=1,
+                is_scheduled=True,
+                user=self.user,
+            ),
+            "inactive_unscheduled": Appointment.objects.create(
+                organization=organization,
+                category=category,
+                status="inactive",
+                counter=2,
+                is_scheduled=False,
+                user=self.user,
+            ),
+            "already_active": Appointment.objects.create(
+                organization=organization,
+                category=category,
+                status="active",
+                counter=3,
+                is_scheduled=False,
+                user=self.user,
+            ),
+        }
+        return appointments
+
+    def test_activate_unscheduled_inactive_appointment(self, setup_appointments, mocker):
+        """
+        Test that an inactive and unscheduled appointment is activated successfully.
+        """
+        appointment = setup_appointments["inactive_unscheduled"]
+
+        # Mock handle_appointment_scheduling to avoid external dependencies
+        mock_handle_scheduling = mocker.patch(
+            "main.appointments.service.handle_appointment_scheduling",
+            return_value=(10, None),
+        )
+
+        success, result = activate_appointment(appointment.id)
+
+        appointment.refresh_from_db()
+
+        assert success is True
+        assert result["status"] == "active"
+        assert result["counter"] == 10
+        assert appointment.status == "active"
+        assert appointment.counter == 10
+
+    def test_activate_already_active_appointment(self, setup_appointments):
+        """
+        Test that an already active appointment cannot be activated again.
+        """
+        appointment = setup_appointments["already_active"]
+
+        success, result = activate_appointment(appointment.id)
+
+        assert success is False
+        assert result == "Invalid Appointment: Already active or scheduled."
+
+    def test_activate_scheduled_appointment(self, setup_appointments):
+        """
+        Test that a scheduled appointment cannot be activated.
+        """
+        appointment = setup_appointments["active_scheduled"]
+
+        success, result = activate_appointment(appointment.id)
+
+        assert success is False
+        assert result == "Invalid Appointment: Already active or scheduled."
+
+    def test_handle_scheduling_error(self, setup_appointments, mocker):
+        """
+        Test that activation fails if scheduling logic returns an error.
+        """
+        appointment = setup_appointments["inactive_unscheduled"]
+
+        # Mock handle_appointment_scheduling to simulate an error
+        mock_handle_scheduling = mocker.patch(
+            "main.appointments.service.handle_appointment_scheduling",
+            return_value=(None, "Some scheduling error"),
+        )
+
+        success, result = activate_appointment(appointment.id)
+
+        assert success is False
+        assert result == "Scheduling Error: Some scheduling error"
+
+        # Ensure the appointment was not updated
+        appointment.refresh_from_db()
+        assert appointment.status == "inactive"
+        assert appointment.counter == 2
+
+        # Ensure scheduling logic was called
+        mock_handle_scheduling.assert_called_once_with(appointment.as_dict())

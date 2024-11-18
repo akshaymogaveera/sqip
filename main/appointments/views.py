@@ -1,4 +1,4 @@
-from main.appointments.service import handle_appointment_scheduling, move_appointment
+from main.appointments.service import handle_appointment_scheduling, move_appointment, activate_appointment
 from main.service import (
     get_scheduled_appointments_for_superuser,
     get_scheduled_appointments_for_user,
@@ -19,7 +19,6 @@ from main.appointments.serializers import (
     AppointmentSerializer,
     MakeAppointmentSerializer,
     MoveAppointmentIDValidatorSerializer,
-    OrganizationSerializer,
     ValidateAppointmentInput,
     AppointmentListQueryParamsSerializer,
 )
@@ -274,6 +273,42 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
             return Response({"detail": message}, status=status.HTTP_200_OK)
         else:
             return Response({"errors": message}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+    @action(detail=True, methods=["post"], url_path="activate")
+    def activate(self, request, pk=None):
+        """
+        Activate an appointment by setting its status to "active."
+
+        This endpoint validates the appointment ID, activates the appointment if eligible,
+        and returns the updated appointment details or an error message.
+
+        Args:
+            request: The request object containing appointment ID in query parameters.
+            pk (str): The primary key of the appointment.
+
+        Returns:
+            Response: 
+                - HTTP 200 with the updated appointment details if successful.
+                - HTTP 400 with error messages if activation fails.
+        """
+        # Validate the appointment ID from the request parameters
+        query_params_serializer = AppointmentIDValidatorSerializer(
+            data={"appointment_id": pk}, context={"request": request}
+        )
+        query_params_serializer.is_valid(raise_exception=True)
+        appointment_id = query_params_serializer.validated_data["appointment_id"]
+
+        # Attempt to activate the appointment
+        success, result = activate_appointment(appointment_id)
+
+        if success:
+            # Ensure result is a dictionary containing the updated appointment details
+            return Response(result, status=status.HTTP_200_OK)
+        else:
+            # Return the error message if activation failed
+            return Response({"errors": result}, status=status.HTTP_400_BAD_REQUEST)
+
 
     @action(detail=True, methods=["post"], url_path="move")
     def move(self, request, pk=None):

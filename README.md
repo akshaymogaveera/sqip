@@ -424,3 +424,30 @@ Sample Response:
 ```
  SAME AS ABOVE
 ```
+
+------------------------------------------------------------------------------------------------
+
+> Activate Appointment
+
+Will move inactive appointment to the end of the queue.
+
+URL: ```/api/appointments/<appointment_id>/activate/``` (POST)
+
+
+Sample Response:
+```
+{
+    "id": 134,
+    "user": 7,
+    "category": 1,
+    "organization": 1,
+    "type": "",
+    "counter": 5,
+    "status": "active",
+    "is_scheduled": false,
+    "estimated_time": null,
+    "created_by": null,
+    "updated_by": null
+}
+```
+------------------------------------------------------------------------------------------------

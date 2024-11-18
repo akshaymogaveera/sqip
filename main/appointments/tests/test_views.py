@@ -741,3 +741,130 @@ class TestMoveAppointment:
         assert (
             counters == expected_counters
         ), f"Expected counters: {expected_counters}, but got: {counters}"
+
+
+@pytest.mark.django_db
+class TestActivateAppointment:
+    """
+    Test class for the activate endpoint in AppointmentViewSet.
+    """
+
+    @pytest.fixture
+    def setup_appointments(self):
+        """
+        Fixture to create a user, organization, category, and appointments for testing.
+        """
+        self.client = APIClient()
+        self.user = User.objects.create_user(username="testuser", password="testpassword")
+
+        self.group = Group.objects.create(name="Test Group for User")
+        self.user.groups.add(self.group)
+
+        token_response = self.client.post(
+            reverse("token_obtain_pair"),
+            {"username": "testuser", "password": "testpassword"},
+        )
+        self.token = token_response.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
+
+        self.organization = Organization.objects.create(
+            name="Test Organization", created_by=self.user, status="active"
+        )
+
+        self.category = Category.objects.create(
+            organization=self.organization, status="active", created_by=self.user, group=self.group
+        )
+
+        # Create appointments
+        self.appointment_1 = Appointment.objects.create(
+            organization=self.organization,
+            category=self.category,
+            status="inactive",
+            counter=1,
+            is_scheduled=False,
+            user=self.user,
+        )
+
+        return self.appointment_1
+
+    def test_activate_success(self, setup_appointments):
+        """
+        Test the activation of an appointment.
+        """
+        appointment_1 = setup_appointments
+
+        # Simulate the activation request
+        url = reverse("appointments-activate", kwargs={"pk": appointment_1.id})
+        response = self.client.post(url)
+
+        # Ensure the response status is 200 OK
+        assert response.status_code == status.HTTP_200_OK
+
+        # Ensure the appointment is updated and its status is "active"
+        appointment_1.refresh_from_db()
+        assert appointment_1.status == "active"
+        assert response.data["status"] == "active"
+
+    def test_activate_already_active(self, setup_appointments):
+        """
+        Test attempting to activate an already active appointment.
+        """
+        appointment_2 = setup_appointments
+
+        appointment_2.status = "active"
+        appointment_2.save()
+
+        # Simulate the activation request
+        url = reverse("appointments-activate", kwargs={"pk": appointment_2.id})
+        response = self.client.post(url)
+
+        # Ensure the response status is 400 Bad Request due to already active status
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Invalid Appointment" in response.data["errors"]
+
+    def test_activate_invalid_appointment(self, setup_appointments):
+        """
+        Test attempting to activate a non-existent appointment.
+        """
+        _ = setup_appointments
+        # Simulate the activation request for a non-existent appointment ID
+        url = reverse("appointments-activate", kwargs={"pk": 999999})
+        response = self.client.post(url)
+
+        # Ensure the response status is 400 Bad Request due to invalid ID
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json() == {'non_field_errors': ['Appointment with this ID does not exist.']}
+
+    def test_activate_with_scheduled_appointment(self, setup_appointments):
+        """
+        Test attempting to activate an appointment that is already scheduled.
+        """
+        appointment_1 = setup_appointments
+        appointment_1.is_scheduled = True
+        appointment_1.save()
+
+        # Simulate the activation request
+        url = reverse("appointments-activate", kwargs={"pk": appointment_1.id})
+
+        response = self.client.post(url)
+
+        # Ensure the response status is 400 Bad Request due to scheduled status
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Invalid Appointment" in response.data["errors"]
+
+    def test_activate_with_scheduling_error(self, setup_appointments, mocker):
+        """
+        Test that handles errors during the scheduling process.
+        """
+        appointment_1 = setup_appointments
+
+        # Mock the handle_appointment_scheduling to simulate an error
+        mocker.patch("main.appointments.service.handle_appointment_scheduling", return_value=(None, "Scheduling Error"))
+
+        # Simulate the activation request
+        url = reverse("appointments-activate", kwargs={"pk": appointment_1.id})
+        response = self.client.post(url)
+
+        # Ensure the response status is 400 Bad Request due to scheduling error
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Scheduling Error" in response.data["errors"]

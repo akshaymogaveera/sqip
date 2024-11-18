@@ -23,6 +23,7 @@ propcache==0.2.0
 PyJWT==2.9.0
 pytest==8.3.3
 pytest-django==4.9.0
+pytest-mock==3.14.0
 referencing==0.35.1
 requests==2.32.3
 rpds-py==0.20.0

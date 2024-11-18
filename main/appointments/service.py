@@ -82,3 +82,48 @@ def move_appointment(current_appointment_id, previous_appointment_id=None):
         # **Step 3**: Reactivate the current appointment with the new counter
         current_appointment.status = "active"
         current_appointment.save()
+
+
+def activate_appointment(appointment_id):
+    """
+    Activates an appointment by updating its status and counter.
+
+    This function ensures that an appointment is eligible for activation, 
+    processes scheduling, and updates the appointment status to "active" 
+    if all conditions are met.
+
+    Args:
+        appointment_id (int): The unique identifier of the appointment to activate.
+
+    Returns:
+        tuple: 
+            - (bool, dict or str): 
+                - `True, dict`: If the appointment was successfully activated, 
+                  the updated appointment details are returned as a dictionary.
+                - `False, str`: If activation failed, an error message is returned.
+    """
+    # Fetch the appointment, bypassing any status-related restrictions
+    appointment = get_appointment_by_id(appointment_id, ignore_status=True)
+
+    # Check if the appointment is already active or scheduled
+    if appointment.status == "active" or appointment.is_scheduled:
+        return False, "Invalid Appointment: Already active or scheduled."
+
+    # Convert the appointment object into a dictionary for scheduling logic
+    appointment_dict = appointment.as_dict()
+
+    # Handle scheduling, receiving the updated counter or an error message
+    counter, error_message = handle_appointment_scheduling(appointment_dict)
+
+    # If there was an error during scheduling, return a failure response
+    if error_message:
+        return False, f"Scheduling Error: {error_message}"
+
+    # Update the appointment's counter and activate its status
+    appointment.counter = counter
+    appointment.status = "active"
+    appointment.save()
+
+    # Return success along with the updated appointment details
+    return True, appointment.as_dict()
+

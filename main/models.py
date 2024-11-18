@@ -3,6 +3,7 @@ from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
+from django.forms.models import model_to_dict
 
 # Create your models here.
 
@@ -104,6 +105,15 @@ class Appointment(models.Model):
         related_name="updated_appointments",
     )
 
+    def as_dict(self) -> dict:
+        """
+        Converts the Appointment instance to a dictionary representation, 
+        including all fields in the model.
+        
+        Returns:
+            dict: Dictionary representation of the Appointment instance.
+        """
+        return model_to_dict(self)
 
 class SubCategory(models.Model):
     category = models.ForeignKey(Category, on_delete=models.PROTECT)
