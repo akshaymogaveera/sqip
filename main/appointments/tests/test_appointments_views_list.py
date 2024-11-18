@@ -71,6 +71,15 @@ class TestListUserAppointments:
         assert response.status_code == status.HTTP_200_OK
         assert response.json().get("count") == 2  # Should return both appointments
 
+    def test_list_user_appointments_checkin(self):
+        """Test retrieving only checkin user appointments."""
+        url = reverse("appointments-list") + "?status=checkin"
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert (
+            response.json().get("count") == 1
+        )
+
     def test_list_user_appointments_scheduled(self):
         """Test retrieving only scheduled user appointments."""
         url = reverse("appointments-list") + "?type=scheduled"
@@ -220,14 +229,12 @@ class TestListScheduledAppointments:
 
     def test_list_user_appointments_scheduled_status_inactive(self):
         """Test retrieving only inactive user appointments.
-        
-        # Will ignore status, if regular user.
         """
         url = reverse("appointments-list-scheduled") + "?status=inactive"
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert (
-            response.json().get("count") == 3
+            response.json().get("count") == 1
         )
 
     def test_list_scheduled_superuser_access(self):
@@ -540,7 +547,7 @@ class TestListUnscheduledAppointments:
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert (
-            response.json().get("count") == 3
+            response.json().get("count") == 1
         )
 
     def test_list_unscheduled_invalid_category_id(self):

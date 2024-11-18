@@ -45,17 +45,22 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         ?type=scheduled
         ?type=unscheduled
 
+        ** Filter by status
+            ?status=active (default)
+            ?status=checkin
+            ?status=inactive
         """
         user = self.request.user
         status_type = request.query_params.get("type", "all")
+        status = request.query_params.get("status", "active")
 
         # Retrieve appointments based on the filter
         if status_type == "scheduled":
-            appointments = get_user_appointments(user, is_scheduled=True)
+            appointments = get_user_appointments(user, is_scheduled=True, status=status)
         elif status_type == "unscheduled":
-            appointments = get_user_appointments(user, is_scheduled=False)
+            appointments = get_user_appointments(user, is_scheduled=False, status=status)
         else:
-            appointments = get_user_appointments(user)  # 'all' or invalid value
+            appointments = get_user_appointments(user, status=status)  # 'all' or invalid value
 
         # Paginate the queryset using StandardResultsSetPagination
         page = self.paginate_queryset(appointments)
