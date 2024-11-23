@@ -10,6 +10,7 @@ from main.service import (
     get_appointment_by_id,
     get_authorized_categories_for_user,
     get_last_counter_for_appointment,
+    get_first_counter_for_appointment,
     get_scheduled_appointments_for_superuser,
     get_scheduled_appointments_for_user,
     get_unscheduled_appointments_for_superuser,
@@ -615,3 +616,145 @@ class TestUtilityFunctions:
 
         assert success is False
         assert message == "Appointment does not exist."
+
+@pytest.mark.django_db
+class TestGetFirstCounterForAppointment:
+    """
+    Unit tests for the `get_first_counter_for_appointment` function.
+    """
+
+    @pytest.fixture
+    def setup_appointments(self):
+        """
+        Fixture to set up organizations, categories, and appointments for testing.
+        """
+        self.user = User.objects.create_user(username="testuser", password="testpassword")
+
+        organization = Organization.objects.create(
+            name="Test Organization", created_by=self.user, status="active"
+        )
+        category = Category.objects.create(
+            organization=organization, status="active", created_by=self.user
+        )
+
+        # Create 3 active, unscheduled appointments with different counters
+        appointments = [
+            Appointment.objects.create(
+                organization=organization,
+                category=category,
+                status="active",
+                counter=i,
+                is_scheduled=False,
+                user=self.user,
+            )
+            for i in [10, 5, 15]
+        ]
+
+        # Create other appointments that should not affect the result
+        Appointment.objects.create(
+            organization=organization,
+            category=category,
+            status="inactive",
+            counter=1,
+            is_scheduled=False,
+            user=self.user,
+        )
+        Appointment.objects.create(
+            organization=organization,
+            category=category,
+            status="active",
+            counter=20,
+            is_scheduled=True,
+            user=self.user,
+        )
+
+        return organization, category, appointments
+
+    def test_first_counter_with_appointments(self, setup_appointments):
+        """
+        Test that the function correctly returns the smallest counter value for active, unscheduled appointments.
+        """
+        organization, category, appointments = setup_appointments
+        first_counter = get_first_counter_for_appointment(organization, category)
+        assert first_counter == 4  # The smallest counter value among valid appointments
+
+    def test_first_counter_no_appointments(self):
+        """
+        Test that the function returns 0 when no active, unscheduled appointments exist.
+        """
+        user = User.objects.create_user(username="testuser", password="testpassword")
+        organization = Organization.objects.create(
+            name="Empty Organization", created_by=user, status="active"
+        )
+        category = Category.objects.create(
+            organization=organization, status="active", created_by=user
+        )
+
+        first_counter = get_first_counter_for_appointment(organization, category)
+        assert first_counter == 0
+
+    def test_first_counter_only_scheduled_appointments(self):
+        """
+        Test that the function returns 0 if all appointments are scheduled.
+        """
+        user = User.objects.create_user(username="testuser", password="testpassword")
+        organization = Organization.objects.create(
+            name="Scheduled Only Organization", created_by=user, status="active"
+        )
+        category = Category.objects.create(
+            organization=organization, status="active", created_by=user
+        )
+
+        # Create only scheduled appointments
+        Appointment.objects.create(
+            organization=organization,
+            category=category,
+            status="active",
+            counter=5,
+            is_scheduled=True,
+            user=user,
+        )
+        Appointment.objects.create(
+            organization=organization,
+            category=category,
+            status="active",
+            counter=10,
+            is_scheduled=True,
+            user=user,
+        )
+
+        first_counter = get_first_counter_for_appointment(organization, category)
+        assert first_counter == 0
+
+    def test_first_counter_only_inactive_appointments(self):
+        """
+        Test that the function returns 0 if all appointments are inactive.
+        """
+        user = User.objects.create_user(username="testuser", password="testpassword")
+        organization = Organization.objects.create(
+            name="Inactive Only Organization", created_by=user, status="active"
+        )
+        category = Category.objects.create(
+            organization=organization, status="active", created_by=user
+        )
+
+        # Create only inactive appointments
+        Appointment.objects.create(
+            organization=organization,
+            category=category,
+            status="inactive",
+            counter=5,
+            is_scheduled=False,
+            user=user,
+        )
+        Appointment.objects.create(
+            organization=organization,
+            category=category,
+            status="inactive",
+            counter=10,
+            is_scheduled=False,
+            user=user,
+        )
+
+        first_counter = get_first_counter_for_appointment(organization, category)
+        assert first_counter == 0

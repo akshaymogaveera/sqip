@@ -5,6 +5,7 @@ from main.service import (
     check_organization_is_active,
     get_appointment_by_id,
     get_last_counter_for_appointment,
+    get_first_counter_for_appointment
 )
 from django.db import models, transaction
 
@@ -44,42 +45,50 @@ def move_appointment(current_appointment_id, previous_appointment_id=None):
     """Moves the current appointment to the position of the previous appointment."""
 
     with transaction.atomic():
-        # Retrieve the current appointment
+        # Retrieve appointments
         current_appointment = get_appointment_by_id(current_appointment_id)
         previous_appointment = get_appointment_by_id(previous_appointment_id)
 
-        # Temporarily set the status of the current appointment to inactive
+        # Temporarily set current appointment status to inactive
         current_appointment.status = "inactive"
         current_appointment.save()
 
-        # Since we are removing this appointment from current position, we will need to adjust (decrement) appointments above it.
-        # Decrement all the appointments with counter > current_appointment.counter
-        adjust_appointment_counter(
-            current_appointment, False, current_appointment.counter
-        )
-
-        # Determine the new counter position based on the previous appointment
-        # Only None if the appointment is moved to first position.
         if previous_appointment_id is None:
-            # If no previous appointment, set current appointment counter to 1
+            # Move to the first position
+            # Increment all appointments, if moved to first.
+            adjust_appointment_counter(
+                appointment=current_appointment,
+                increment=True,
+                reference_counter=get_first_counter_for_appointment(
+                    current_appointment.organization, current_appointment.category
+                ),
+                counter_limit=current_appointment.counter,
+            )
             current_appointment.counter = 1
-            previous_counter = 0  # Default previous counter
-        else:
-            # Retrieve the previous appointment
-            previous_appointment = get_appointment_by_id(previous_appointment_id)
-            previous_counter = previous_appointment.counter
+        elif current_appointment.counter < previous_appointment.counter:
+            # Move downwards (increase counter for other appointments)
+            adjust_appointment_counter(
+                appointment=current_appointment,
+                increment=False,
+                reference_counter=current_appointment.counter,
+                counter_limit=previous_appointment.counter + 1,
+            )
+            # Update the current appointment to updated previous appointment counter.
+            previous_appointment.refresh_from_db()
+            current_appointment.counter = previous_appointment.counter + 1
+        elif current_appointment.counter > previous_appointment.counter:
+            # Move upwards (decrease counter for other appointments)
+            adjust_appointment_counter(
+                appointment=current_appointment,
+                increment=True,
+                reference_counter=previous_appointment.counter,
+                counter_limit=current_appointment.counter,
+            )
+            # Update the current appointment to updated previous appointment counter.
+            previous_appointment.refresh_from_db()
+            current_appointment.counter = previous_appointment.counter + 1
 
-            # The current appointment will be placed above the previous appointment.
-            current_appointment.counter = (
-                previous_counter + 1
-            )  # Move current appointment to the new position
-
-        # We will increment all the appointments above the previous appointments.
-        # The current appointment will be above previous appointment, also the current won't be incremented as its not saved yet.
-        # Move the existing appointment forward by 1
-        adjust_appointment_counter(current_appointment, True, previous_counter)
-
-        # **Step 3**: Reactivate the current appointment with the new counter
+        # Reactivate and save the updated appointment
         current_appointment.status = "active"
         current_appointment.save()
 

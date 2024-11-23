@@ -298,6 +298,118 @@ class TestAdjustAppointmentCounter:
         scheduled_appointment.refresh_from_db()
         assert scheduled_appointment.counter == 5
 
+    def test_increment_counters_with_counter_limit(self, setup_appointments):
+        """
+        Test that counters are incremented correctly for appointments within the specified counter range.
+        """
+        appointment_to_adjust = setup_appointments[2]  # Example counter = 3
+        reference_counter = appointment_to_adjust.counter
+        counter_limit = 8
+
+        # Initial counters to verify changes
+        initial_counters = {app.id: app.counter for app in setup_appointments}
+
+        adjust_appointment_counter(
+            appointment_to_adjust,
+            increment=True,
+            reference_counter=reference_counter,
+            counter_limit=counter_limit,
+        )
+
+        # Verify that only counters > 3 and < 8 were incremented
+        for app in Appointment.objects.all():
+            if reference_counter < initial_counters[app.id] < counter_limit:
+                assert app.counter == initial_counters[app.id] + 1
+            else:
+                assert app.counter == initial_counters[app.id]
+
+    def test_decrement_counters_with_counter_limit(self, setup_appointments):
+        """
+        Test that counters are decremented correctly for appointments within the specified counter range.
+        """
+        appointment_to_adjust = setup_appointments[0]
+        reference_counter = 3
+        counter_limit = 7
+
+        # Initial counters to verify changes
+        initial_counters = {app.id: app.counter for app in setup_appointments}
+
+        adjust_appointment_counter(
+            appointment_to_adjust,
+            increment=False,
+            reference_counter=reference_counter,
+            counter_limit=counter_limit,
+        )
+
+        # Verify that only counters > 3 and < 7 were decremented
+        for app in Appointment.objects.all():
+            if reference_counter < initial_counters[app.id] < counter_limit:
+                assert app.counter == initial_counters[app.id] - 1
+            else:
+                assert app.counter == initial_counters[app.id]
+
+    def test_no_appointments_updated_outside_counter_limit(self, setup_appointments):
+        """
+        Test that no appointments are updated when counter_limit excludes all counters.
+        """
+        appointment_to_adjust = setup_appointments[2]  # Example counter = 3
+        reference_counter = appointment_to_adjust.counter
+        counter_limit = 4  # Only counter = 3 is eligible, but it's excluded by counter_limit
+
+        # Initial counters to verify no changes
+        initial_counters = {app.id: app.counter for app in setup_appointments}
+
+        adjust_appointment_counter(
+            appointment_to_adjust,
+            increment=True,
+            reference_counter=reference_counter,
+            counter_limit=counter_limit,
+        )
+
+        # Verify that no counters were changed
+        for app in Appointment.objects.all():
+            assert app.counter == initial_counters[app.id]
+
+    def test_counter_limit_with_scheduled_appointments(self, setup_appointments):
+        """
+        Test that scheduled appointments are not affected even if they fall within the counter range.
+        """
+        appointment_to_adjust = setup_appointments[0]
+        reference_counter = 2
+        counter_limit = 7
+
+        # Create a scheduled appointment within the counter range
+        scheduled_appointment = Appointment.objects.create(
+            organization_id=appointment_to_adjust.organization.id,
+            category_id=appointment_to_adjust.category.id,
+            status="active",
+            counter=5,
+            is_scheduled=True,
+            user=self.user,
+        )
+
+        initial_counters = {app.id: app.counter for app in setup_appointments}
+        initial_scheduled_counter = scheduled_appointment.counter
+
+        adjust_appointment_counter(
+            appointment_to_adjust,
+            increment=False,
+            reference_counter=reference_counter,
+            counter_limit=counter_limit,
+        )
+
+        # Verify scheduled appointment is unaffected
+        scheduled_appointment.refresh_from_db()
+        assert scheduled_appointment.counter == initial_scheduled_counter
+
+        # Verify other appointments in the range are updated
+        for app in Appointment.objects.exclude(id=scheduled_appointment.id):
+            if reference_counter < initial_counters[app.id] < counter_limit:
+                assert app.counter == initial_counters[app.id] - 1
+            else:
+                assert app.counter == initial_counters[app.id]
+
+
     def test_move_middle_to_first_position(self, setup_appointments):
         """
         Test moving an appointment to the first position.

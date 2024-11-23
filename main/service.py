@@ -1,7 +1,6 @@
 from django.db import models
 from main.models import Appointment, Organization, Category, User
-from django.db.models import Max
-from django.contrib.auth import get_user_model
+from django.db.models import Max, Min
 
 
 def check_organization_is_active(organization_id):
@@ -59,6 +58,21 @@ def get_last_counter_for_appointment(organization, category):
     return (
         last_appointment["counter__max"] + 1 if last_appointment["counter__max"] else 1
     )
+
+def get_first_counter_for_appointment(organization, category):
+    """
+    Get the first counter for an active appointment in the given organization and category.
+    Returns 0 if no appointments are found.
+    """
+    first_appointment = Appointment.objects.filter(
+        organization=organization,
+        category=category,
+        status="active",
+        is_scheduled=False,
+    ).aggregate(Min("counter"))
+
+    # Return the minimum counter value or 0 if none exists
+    return first_appointment["counter__min"] - 1 if first_appointment["counter__min"] is not None else 0
 
 
 def get_user_appointments(user, is_scheduled=None, status="active"):
@@ -215,23 +229,31 @@ def set_appointment_status(appointment_id, status, user, ignore_status=False):
     return True, f"Appointment status updated to '{status}' successfully."
 
 
-def adjust_appointment_counter(appointment, increment, reference_counter) -> None:
+def adjust_appointment_counter(appointment, increment, reference_counter, counter_limit=None) -> None:
     """Adjusts the counter of appointments based on the specified increment or decrement action.
 
     Args:
         appointment: The appointment object whose counter is to be adjusted.
         increment: Boolean indicating whether to increment (True) or decrement (False) the counter.
         reference_counter: The threshold counter value used to determine which appointments to update.
+        counter_limit: An optional value to further filter appointments where counter < counter_limit.
     """
 
     # Determine the counter adjustment operation
     counter_adjustment = models.F("counter") + (1 if increment else -1)
 
-    # Update the counter for active appointments created after the reference counter
-    Appointment.objects.filter(
-        organization=appointment.organization.id,
-        category=appointment.category.id,
-        status="active",
-        counter__gt=reference_counter,
-        is_scheduled=False,
-    ).update(counter=counter_adjustment)
+    # Build the base query filter
+    query_filter = {
+        "organization": appointment.organization.id,
+        "category": appointment.category.id,
+        "status": "active",
+        "counter__gt": reference_counter,
+        "is_scheduled": False,
+    }
+
+    # Add the counter limit condition if provided
+    if counter_limit is not None:
+        query_filter["counter__lt"] = counter_limit
+
+    # Update the counter for filtered appointments
+    Appointment.objects.filter(**query_filter).update(counter=counter_adjustment)
