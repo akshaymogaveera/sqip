@@ -56,15 +56,16 @@ def move_appointment(current_appointment_id, previous_appointment_id=None):
         if previous_appointment_id is None:
             # Move to the first position
             # Increment all appointments, if moved to first.
+            first_counter = get_first_counter_for_appointment(
+                    current_appointment.organization, current_appointment.category
+            )
             adjust_appointment_counter(
                 appointment=current_appointment,
                 increment=True,
-                reference_counter=get_first_counter_for_appointment(
-                    current_appointment.organization, current_appointment.category
-                ),
+                reference_counter=first_counter,
                 counter_limit=current_appointment.counter,
             )
-            current_appointment.counter = 1
+            current_appointment.counter = first_counter + 1
         elif current_appointment.counter < previous_appointment.counter:
             # Move downwards (increase counter for other appointments)
             adjust_appointment_counter(
