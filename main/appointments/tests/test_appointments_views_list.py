@@ -102,10 +102,23 @@ class TestListUserAppointments:
         """Test handling of invalid type value."""
         url = reverse("appointments-list") + "?type=invalid"
         response = self.client.get(url)
-        assert response.status_code == status.HTTP_200_OK
-        assert (
-            response.json().get("count") == 2
-        )  # Invalid filter should return all appointments
+        assert response.status_code == 400
+        assert response.json() == {
+            "type": [
+                "\"invalid\" is not a valid choice."
+            ]
+        }
+
+    def test_list_user_appointments_invalid_status(self):
+        """Test handling of invalid status value."""
+        url = reverse("appointments-list") + "?status=invalid"
+        response = self.client.get(url)
+        assert response.status_code == 400
+        assert response.json() == {
+            "status": [
+                "\"invalid\" is not a valid choice."
+            ]
+        }
 
     def test_list_user_appointments_no_appointments(self):
         """Test response when user has no appointments."""

@@ -10,6 +10,10 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.exceptions import ValidationError
+from main.decorators import view_set_error_handler
+import logging
+
+logger = logging.getLogger('sqip')
 
 class StandardResultsSetPagination(PageNumberPagination):
     """
@@ -89,44 +93,59 @@ class CategoryViewSet(viewsets.ModelViewSet):
     ordering_fields = ['created_at', 'estimated_time']
     ordering = ['created_at']
 
+    @view_set_error_handler
     def retrieve(self, request, pk=None):
         """
         Retrieve a single Category by ID.
         """
         category = get_object_or_404(Category, pk=pk)
+        logger.info(
+            "User %d (%s) retrieved category with ID %s.",
+            request.user.id, request.user.username, pk
+        )
         serializer = self.get_serializer(category)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @view_set_error_handler
     def list(self, request):
         """
         List all categories with search, filter, and pagination support.
         """
+        logger.info(
+            "User %d (%s) is listing categories with filters: %s",
+            request.user.id, request.user.username, request.query_params
+        )
         queryset = self.filter_queryset(self.get_queryset())
         page = self.paginate_queryset(queryset)
         
         if page is not None:
             serializer = self.get_serializer(page, many=True)
+            logger.debug("Returning paginated response for categories.")
             return self.get_paginated_response(serializer.data)
         
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
     @action(detail=False, methods=["get"], url_path="active")
+    @view_set_error_handler
     def active(self, request):
         """
         Custom action to list all active categories.
         """
+        logger.info("User %d (%s) is listing active categories.", request.user.id, request.user.username)
         active_categories = self.filter_queryset(self.get_queryset().filter(status="active"))
         page = self.paginate_queryset(active_categories)
         
         if page is not None:
             serializer = self.get_serializer(page, many=True)
+            logger.debug("Returning paginated response for active categories.")
             return self.get_paginated_response(serializer.data)
         
         serializer = self.get_serializer(active_categories, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
     @action(detail=False, methods=["get"], url_path="user")
+    @view_set_error_handler
     def user(self, request):
         """
         Retrieve categories associated with the user's groups.
@@ -134,6 +153,10 @@ class CategoryViewSet(viewsets.ModelViewSet):
         eg. ?status=active
         """
         user = request.user
+        logger.info(
+            "User %d (%s) is retrieving categories associated with their groups: %s",
+            user.id, user.username, user.groups.all()
+        )
         groups = user.groups.all()  # Get all groups the user belongs to
 
         # Assuming Category has a relation to Group via a ForeignKey or ManyToMany field
@@ -149,6 +172,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
     
 
     @action(detail=True, methods=["patch"], url_path="update-status")
+    @view_set_error_handler
     def update_status(self, request, pk=None):
         """
         Update the status of a category to active or inactive.
@@ -156,20 +180,28 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
         data = {
             "category_id": pk,
-             "status": request.data.get("status")
+            "status": request.data.get("status")
         }
         serializer = ValidateCategorySerializer(data=data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-
+        
+        logger.info(
+            "User %d (%s) is updating the status of category %s to %s.",
+            request.user.id, request.user.username, pk, request.data.get("status")
+        )
         category_id = serializer.validated_data["category_id"]
         new_status = serializer.validated_data["status"]
-
 
         category = get_category(category_id)
 
         # Update and save the category
         category.status = new_status
         category.save()
+
+        logger.info(
+            "Category %d status updated to %s by user %d (%s).",
+            category_id, new_status, request.user.id, request.user.username
+        )
 
         return Response(
             {"detail": f"Category status updated to {new_status}."},

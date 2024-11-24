@@ -142,3 +142,73 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+
+# Logger Initialization:
+
+# Use logging.getLogger('myapp') to get the logger associated with your app.
+# Match the logger name with the one defined in LOGGING.
+# Log Messages:
+
+# INFO: Logs high-level events like a request being received and a successful operation.
+# ERROR: Logs errors with exc_info=True to capture the stack trace for debugging.
+# Logging Levels:
+
+# Use appropriate levels (DEBUG, INFO, WARNING, ERROR, CRITICAL) based on the context.
+# Exception Logging:
+
+# Log exceptions with detailed context for easier debugging in production.
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'DEBUG',  # Adjusted to DEBUG to catch all logs in console
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+        'file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': 'debug.log',
+            'formatter': 'verbose',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',  # Keeping INFO to show request logs
+            'propagate': True,
+        },
+        'sqip': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'ERROR',  # Suppress database query logs at DEBUG level
+            'propagate': False,
+        },
+        'django.server': {
+            'handlers': ['console'],
+            'level': 'INFO',  # Set to INFO to show HTTP request logs
+            'propagate': False,
+        },
+    },
+}
+
+
+
+

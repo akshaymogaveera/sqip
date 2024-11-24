@@ -1,39 +1,42 @@
-from django.shortcuts import render
+import logging
 from django.http import HttpResponse
 from main.models import User
 from rest_framework.response import Response
 import jsonschema
-
 from rest_framework import status
-from django.contrib.auth import login, logout
-from main.utils import authenticateUser, getToken
+from main.utils import getToken
 from main.verification.utils import twilioSendSms, twilioVerifySms
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from django.http import JsonResponse
 from django.contrib.auth import get_user_model
+from main.decorators import view_set_error_handler
+
+logger = logging.getLogger('sqip')
 
 def index(request):
     return HttpResponse('Hello, welcome to SQIP!.')
-
 
 class ValidateToken(APIView):
     """Endpoint for validating and refreshing a user’s authentication token."""
     
     permission_classes = (IsAuthenticated,)
 
+    @view_set_error_handler
     def get(self, request):
         user = request.user
         if user.is_authenticated:
-            refresh_token, access_token = getToken(user)  # Assume `getToken` is defined elsewhere
-            return JsonResponse({
+            refresh_token, access_token = getToken(user)
+            logger.info("User %d (%s) validated their token successfully.", user.id, user.username)
+            return Response({
                 'status': 'Success',
                 'refresh': refresh_token,
                 'access': access_token,
                 'id': user.id
-            })
-        
-        return JsonResponse({'status': 'Failed', 'message': "Authentication Failed"}, status=401)
+            }, status=status.HTTP_200_OK)
+
+        logger.warning("Authentication failed for user %d (%s).", user.id, user.username)
+        return Response({'status': 'Failed', 'message': "Authentication Failed"}, status=status.HTTP_401_UNAUTHORIZED)
 
 
 class AuthenticateUser(APIView):
@@ -56,22 +59,24 @@ class AuthenticateUser(APIView):
         """
         username = request.data.get('username')
         if not username:
-            return JsonResponse({'status': 'Failed', 'message': 'Username is required'}, status=400)
+            logger.error("Username is required for authentication.")
+            return Response({'status': 'Failed', 'message': 'Username is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             self.user = get_user_model().objects.get(username=username)
         except get_user_model().DoesNotExist:
-            return JsonResponse({'status': 'Failed', 'message': "User not found"}, status=404)
+            logger.error("User %s not found during authentication.", username)
+            return Response({'status': 'Failed', 'message': "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        self.refresh_token, self.access_token = getToken(self.user)  # Assume `getToken` is defined elsewhere
-
-        return JsonResponse({
+        self.refresh_token, self.access_token = getToken(self.user)
+        logger.info("User %d (%s) authenticated successfully.", self.user.id, self.user.username)
+        return Response({
             'status': 'Success',
             'refresh': self.refresh_token,
             'access': self.access_token,
             'id': self.user.id,
             'username': self.user.username
-        })
+        }, status=status.HTTP_200_OK)
 
 
 

@@ -1,3 +1,4 @@
+import logging
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, status
 from rest_framework.response import Response
@@ -8,6 +9,9 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.pagination import PageNumberPagination
 from main.models import Organization
 from main.organization.serializers import OrganizationSerializer
+from main.decorators import view_set_error_handler
+
+logger = logging.getLogger('sqip')
 
 class StandardResultsSetPagination(PageNumberPagination):
     """
@@ -71,33 +75,40 @@ class OrganizationViewSet(viewsets.ModelViewSet):
     ordering_fields = ['name', 'created_by', 'city', 'state', 'country']
     ordering = ['name']  # Default ordering by name
 
+    @view_set_error_handler
     def retrieve(self, request, pk=None):
         """
         Retrieve a single Organization by ID.
         """
+        logger.info("User %d (%s) is retrieving organization with ID %s.", request.user.id, request.user.username, pk)
         organization = get_object_or_404(Organization, pk=pk)
         serializer = self.get_serializer(organization)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @view_set_error_handler
     def list(self, request):
         """
         List all organizations with search, filter, and pagination support.
         """
+        logger.info("User %d (%s) is listing organizations with filters: %s", request.user.id, request.user.username, request.query_params)
         queryset = self.filter_queryset(self.get_queryset())
         page = self.paginate_queryset(queryset)
         
         if page is not None:
             serializer = self.get_serializer(page, many=True)
+            logger.debug("Returning paginated response for organizations.")
             return self.get_paginated_response(serializer.data)
         
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='active')
+    @view_set_error_handler
     def active_organizations(self, request):
         """
         Custom action to retrieve all active organizations.
         """
+        logger.info("User %d (%s) is retrieving active organizations.", request.user.id, request.user.username)
         active_orgs = self.filter_queryset(self.get_queryset().filter(status='active'))
         page = self.paginate_queryset(active_orgs)
         

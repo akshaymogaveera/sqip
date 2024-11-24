@@ -15,3 +15,20 @@ class UnauthorizedAccessException(APIException):
             self.code = code
         else:
             self.code = self.default_code
+
+class SerializerValidationError(Exception):
+    """Exception raised for serializer validation errors."""
+
+    def __init__(self, errors):
+        """Initialize the serializer validation error with the provided errors.
+
+        Args:
+            errors: The errors returned by the serializer.
+
+        """
+        super().__init__(str(errors))
+        self.errors = errors
+
+    def __str__(self):
+        """Return a string representation of the error."""
+        return f"{self.errors}"

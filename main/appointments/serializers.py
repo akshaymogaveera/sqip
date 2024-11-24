@@ -103,6 +103,25 @@ class MakeAppointmentSerializer(serializers.ModelSerializer):
             "estimated_time",
         ]
 
+class AppointmentListValidate(serializers.Serializer):
+    status = serializers.ChoiceField(choices=Appointment.STATUS_CHOICES, required=False)
+    type = serializers.ChoiceField(choices=["unscheduled", "scheduled", "all"], required=False)
+
+    def validate(self, attrs):
+        """Additional validations that depend on multiple fields."""
+        
+        status = attrs.get("status")
+        type = attrs.get("type")
+
+        # Validate the status field
+        if status and status not in dict(Appointment.STATUS_CHOICES).keys():
+            raise serializers.ValidationError(f"Invalid status: {status}")
+
+        # Validate the status_type field
+        if type and type not in ["unscheduled", "scheduled", "all"]:
+            raise serializers.ValidationError(f"Invalid status type: {type}")
+
+        return attrs
 
 class AppointmentListQueryParamsSerializer(serializers.Serializer):
     category_id = serializers.ListField(
