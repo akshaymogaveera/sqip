@@ -1,6 +1,7 @@
 from django.shortcuts import get_object_or_404
 from main.models import Category
-from main.category.serializers import CategorySerializer
+from main.service import get_category
+from main.category.serializers import CategorySerializer, ValidateCategorySerializer
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -145,3 +146,32 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+
+    @action(detail=True, methods=["patch"], url_path="update-status")
+    def update_status(self, request, pk=None):
+        """
+        Update the status of a category to active or inactive.
+        """
+
+        data = {
+            "category_id": pk,
+             "status": request.data.get("status")
+        }
+        serializer = ValidateCategorySerializer(data=data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+
+        category_id = serializer.validated_data["category_id"]
+        new_status = serializer.validated_data["status"]
+
+
+        category = get_category(category_id)
+
+        # Update and save the category
+        category.status = new_status
+        category.save()
+
+        return Response(
+            {"detail": f"Category status updated to {new_status}."},
+            status=status.HTTP_200_OK,
+        )

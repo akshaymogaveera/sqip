@@ -23,6 +23,220 @@ Sample Response:
 
 
 ------------------------------------------------------------------------------------------------
+
+> Get Organization
+
+URL: ```api/organizations/<organization_id>/``` (GET)
+
+
+Sample Response:
+```
+{
+    "id": 1,
+    "name": "Arfa",
+    "created_by": 1,
+    "portfolio_site": "",
+    "display_picture": null,
+    "city": "Mumbai",
+    "state": "Maharashtra",
+    "country": "India",
+    "type": "restaurant",
+    "status": "active",
+    "groups": [
+        1
+    ]
+}
+```
+------------------------------------------------------------------------------------------------
+
+> List Organization
+
+For all organizations:
+    URL: ```api/organizations/``` (GET)
+for active organizations:
+    URL: ```api/organizations/active/``` (GET)
+
+### Filter Examples
+- `?status=active` - Filters organizations by status.
+- `?type=clinic` - Filters organizations by type, such as `clinic`.
+- `?city=New York` - Case-insensitive search by city name containing `New York`.
+- `?country=Canada` - Case-insensitive search by country containing `Canada`.
+- `?name=Arteria` - Case-insensitive search by organization name containing `Arteria`.
+
+### Search Example
+- `?search=tech` - Searches across name, city, state, country, and type fields for matches with `tech`.
+
+### Ordering Examples
+- `?ordering=name` - Orders organizations by name (ascending).
+- `?ordering=-name` - Orders organizations by name (descending).
+- `?ordering=city` - Orders organizations by city.
+- `?ordering=state,-country` - Orders organizations by state (ascending) and country (descending).
+
+### Pagination Examples
+- `?page=1` - Returns the first page of results.
+- `?page_size=5` - Adjusts the number of items per page (default is 10, maximum is 100).
+
+### Endpoint Examples
+- **Retrieve specific organization by ID**: `/organizations/<id>/`
+- **List organizations with filters, search, and pagination**: `/organizations/?status=active&type=clinic&city=New York`
+- **Custom action for active organizations**: `/organizations/active/` (lists organizations with `status=active`)
+
+Sample Response:
+```
+{
+    "count": 2,
+    "next": null,
+    "previous": null,
+    "results": [
+        {
+            "id": 1,
+            "name": "Arfa",
+            "created_by": 1,
+            "portfolio_site": "",
+            "display_picture": null,
+            "city": "Mumbai",
+            "state": "Maharashtra",
+            "country": "India",
+            "type": "restaurant",
+            "status": "active",
+            "groups": [
+                1
+            ]
+        },
+        {
+            "id": 2,
+            "name": "Arteria AI",
+            "created_by": 1,
+            "portfolio_site": "",
+            "display_picture": null,
+            "city": "Toronto",
+            "state": "ON",
+            "country": "Canada",
+            "type": "company",
+            "status": "active",
+            "groups": [
+                2
+            ]
+        }
+    ]
+}
+```
+------------------------------------------------------------------------------------------------
+
+> List Category
+
+For all categories:
+    URL: ```api/categories/``` (GET)
+for active categories:
+    URL: ```api/categories/active/``` (GET)
+
+
+### Filter Examples
+- `?status=active` - Filters categories by status.
+- `?type=general` - Filters categories by type, such as `general`.
+- `?description=consultation` - Case-insensitive search by description containing `consultation`.
+- `?organization=<organization_id>` - Filters categories by a specific organization ID.
+- `?organization=<org_id1>,<org_id2>` - Filters categories by a list of organization IDs.
+
+### Search Example
+- `?search=general` - Searches within description field for matches with `general`.
+
+### Ordering Examples
+- `?ordering=created_at` - Orders categories by creation date (ascending).
+- `?ordering=-status` - Orders categories by status (descending).
+
+### Pagination Examples
+- `?page=1` - Returns the first page of results.
+- `?page_size=5` - Adjusts the number of items per page (default is 10, maximum is 100).
+
+### Endpoint Examples
+- **Retrieve specific category by ID**: `/categories/<id>/`
+- **List categories with filters, search, and pagination**: `/categories/?status=active&type=general&description=consultation`
+- **List categories filtered by organization ID**: `/categories/?organization=1`
+- **List categories filtered by multiple organization IDs**: `/categories/?organization=1,2,3`
+- **Custom action for active categories**: `/categories/active/` (lists categories with `status=active`)
+
+
+Sample Response:
+```
+{
+    "count": 2,
+    "next": null,
+    "previous": null,
+    "results": [
+        {
+            "id": 4,
+            "name": null,
+            "status": "active",
+            "type": "general",
+            "estimated_time": null,
+            "description": "Walk in",
+            "created_at": "2024-11-15T03:14:50Z",
+            "group": 4,
+            "organization": 3,
+            "created_by": 2
+        },
+        {
+            "id": 5,
+            "name": null,
+            "status": "active",
+            "type": "inperson",
+            "estimated_time": null,
+            "description": "Drive thru",
+            "created_at": "2024-11-15T03:17:07Z",
+            "group": 5,
+            "organization": 3,
+            "created_by": 2
+        }
+    ]
+}
+```
+
+------------------------------------------------------------------------------------------------
+
+> List Categories under User
+
+> Group("Tims")
+    > user.groups = [Group("Tims")]
+> Category("Tims")
+    > category.group = Group("Tims")
+
+URL: ```api/categories/user/``` (GET)
+
+Can use filter same as above
+?status=active
+
+
+Sample Response:
+```
+ SAME AS ABOVE
+```
+
+------------------------------------------------------------------------------------------------
+
+> Flip status of Category.
+
+Will move inactive appointment to the end of the queue.
+
+URL: ```api/categories/<category-id>/update-status/``` (PATCH)
+
+Sample body:
+
+```
+{
+    "status": "inactive"
+}
+```
+
+
+Sample Response:
+```
+{
+    "detail": "Category status updated to active."
+}
+```
+------------------------------------------------------------------------------------------------
+
 > Create Appointment
 
 URL: ```/api/appointments/create/``` (POST)
@@ -235,197 +449,8 @@ Sample Response:
 ```
 {}
 ```
-------------------------------------------------------------------------------------------------
 
-> Get Organization
-
-URL: ```api/organizations/<organization_id>/``` (GET)
-
-
-Sample Response:
-```
-{
-    "id": 1,
-    "name": "Arfa",
-    "created_by": 1,
-    "portfolio_site": "",
-    "display_picture": null,
-    "city": "Mumbai",
-    "state": "Maharashtra",
-    "country": "India",
-    "type": "restaurant",
-    "status": "active",
-    "groups": [
-        1
-    ]
-}
-```
-------------------------------------------------------------------------------------------------
-
-> List Organization
-
-For all organizations:
-    URL: ```api/organizations/``` (GET)
-for active organizations:
-    URL: ```api/organizations/active/``` (GET)
-
-### Filter Examples
-- `?status=active` - Filters organizations by status.
-- `?type=clinic` - Filters organizations by type, such as `clinic`.
-- `?city=New York` - Case-insensitive search by city name containing `New York`.
-- `?country=Canada` - Case-insensitive search by country containing `Canada`.
-- `?name=Arteria` - Case-insensitive search by organization name containing `Arteria`.
-
-### Search Example
-- `?search=tech` - Searches across name, city, state, country, and type fields for matches with `tech`.
-
-### Ordering Examples
-- `?ordering=name` - Orders organizations by name (ascending).
-- `?ordering=-name` - Orders organizations by name (descending).
-- `?ordering=city` - Orders organizations by city.
-- `?ordering=state,-country` - Orders organizations by state (ascending) and country (descending).
-
-### Pagination Examples
-- `?page=1` - Returns the first page of results.
-- `?page_size=5` - Adjusts the number of items per page (default is 10, maximum is 100).
-
-### Endpoint Examples
-- **Retrieve specific organization by ID**: `/organizations/<id>/`
-- **List organizations with filters, search, and pagination**: `/organizations/?status=active&type=clinic&city=New York`
-- **Custom action for active organizations**: `/organizations/active/` (lists organizations with `status=active`)
-
-Sample Response:
-```
-{
-    "count": 2,
-    "next": null,
-    "previous": null,
-    "results": [
-        {
-            "id": 1,
-            "name": "Arfa",
-            "created_by": 1,
-            "portfolio_site": "",
-            "display_picture": null,
-            "city": "Mumbai",
-            "state": "Maharashtra",
-            "country": "India",
-            "type": "restaurant",
-            "status": "active",
-            "groups": [
-                1
-            ]
-        },
-        {
-            "id": 2,
-            "name": "Arteria AI",
-            "created_by": 1,
-            "portfolio_site": "",
-            "display_picture": null,
-            "city": "Toronto",
-            "state": "ON",
-            "country": "Canada",
-            "type": "company",
-            "status": "active",
-            "groups": [
-                2
-            ]
-        }
-    ]
-}
-```
-------------------------------------------------------------------------------------------------
-
-> List Category
-
-For all categories:
-    URL: ```api/categories/``` (GET)
-for active categories:
-    URL: ```api/categories/active/``` (GET)
-
-
-### Filter Examples
-- `?status=active` - Filters categories by status.
-- `?type=general` - Filters categories by type, such as `general`.
-- `?description=consultation` - Case-insensitive search by description containing `consultation`.
-- `?organization=<organization_id>` - Filters categories by a specific organization ID.
-- `?organization=<org_id1>,<org_id2>` - Filters categories by a list of organization IDs.
-
-### Search Example
-- `?search=general` - Searches within description field for matches with `general`.
-
-### Ordering Examples
-- `?ordering=created_at` - Orders categories by creation date (ascending).
-- `?ordering=-status` - Orders categories by status (descending).
-
-### Pagination Examples
-- `?page=1` - Returns the first page of results.
-- `?page_size=5` - Adjusts the number of items per page (default is 10, maximum is 100).
-
-### Endpoint Examples
-- **Retrieve specific category by ID**: `/categories/<id>/`
-- **List categories with filters, search, and pagination**: `/categories/?status=active&type=general&description=consultation`
-- **List categories filtered by organization ID**: `/categories/?organization=1`
-- **List categories filtered by multiple organization IDs**: `/categories/?organization=1,2,3`
-- **Custom action for active categories**: `/categories/active/` (lists categories with `status=active`)
-
-
-Sample Response:
-```
-{
-    "count": 2,
-    "next": null,
-    "previous": null,
-    "results": [
-        {
-            "id": 4,
-            "name": null,
-            "status": "active",
-            "type": "general",
-            "estimated_time": null,
-            "description": "Walk in",
-            "created_at": "2024-11-15T03:14:50Z",
-            "group": 4,
-            "organization": 3,
-            "created_by": 2
-        },
-        {
-            "id": 5,
-            "name": null,
-            "status": "active",
-            "type": "inperson",
-            "estimated_time": null,
-            "description": "Drive thru",
-            "created_at": "2024-11-15T03:17:07Z",
-            "group": 5,
-            "organization": 3,
-            "created_by": 2
-        }
-    ]
-}
-```
-
-------------------------------------------------------------------------------------------------
-
-> List Categories under User
-
-> Group("Tims")
-    > user.groups = [Group("Tims")]
-> Category("Tims")
-    > category.group = Group("Tims")
-
-URL: ```api/categories/user/``` (GET)
-
-Can use filter same as above
-?status=active
-
-
-Sample Response:
-```
- SAME AS ABOVE
-```
-
-------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------
 
 > Activate Appointment
 

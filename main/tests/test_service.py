@@ -17,6 +17,7 @@ from main.service import (
     get_unscheduled_appointments_for_user,
     get_user_appointments,
     set_appointment_status,
+    get_category
 )
 
 
@@ -170,6 +171,17 @@ class TestUtilityFunctions:
 
         # Test for non-existing category
         assert check_category_is_active(9999, self.organization_active) is None
+
+    def test_get_category(self):
+        """Test if the category exists."""
+        # Test for active category
+        assert (
+            get_category(self.category_active.id)
+            == self.category_active
+        )
+
+        # Test for non-existing category
+        assert get_category(9999) is None
 
     def test_check_user_exists(self):
         """Test if the user exists."""

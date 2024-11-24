@@ -24,6 +24,18 @@ def check_category_is_active(category_id, organization=None):
         return None
 
 
+def get_category(category_id: int):
+    """Get Category.
+    Raise Exception if not found.
+
+    Args:
+        id (int): category ID.
+    """
+    try:
+        return Category.objects.get(id=category_id)
+    except Category.DoesNotExist:
+        return None
+
 def are_valid_category_ids(category_ids):
     """Check if all category_ids exist and are active."""
     return Category.objects.filter(id__in=category_ids, status="active").count() == len(

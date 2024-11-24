@@ -3,7 +3,7 @@ from django.urls import reverse
 from rest_framework import status
 from main.models import Category, Organization
 from rest_framework.test import APIClient
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import Group, User
 
 @pytest.mark.django_db
 class TestCategoryViewSet:
@@ -257,3 +257,140 @@ class TestCategoryByUserViewSet:
         # User should not be able to access categories from group2 and group3.
         assert len(response.data["results"]) == 1
         assert response.data["results"][0]["name"] == "Consultation"  # Categories from other groups (Surgery, Checkup) should not appear.
+
+
+    def test_update_category_status_valid_active_to_inactive(self):
+        """
+        Test updating a category's status from active to inactive.
+        """
+        url = reverse("categories-update-status", args=[self.category1.id])
+        payload = {"status": "inactive"}
+        response = self.client.patch(url, payload, format="json")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["detail"] == "Category status updated to inactive."
+
+        self.category1.refresh_from_db()
+        assert self.category1.status == "inactive"
+
+    def test_update_category_status_valid_inactive_to_active(self):
+        """
+        Test updating a category's status from inactive to active.
+        """
+        self.category1.status = "inactive"
+        self.category1.save()
+
+        url = reverse("categories-update-status", args=[self.category1.id])
+        payload = {"status": "active"}
+        response = self.client.patch(url, payload, format="json")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["detail"] == "Category status updated to active."
+
+        self.category1.refresh_from_db()
+        assert self.category1.status == "active"
+
+    def test_update_category_status_invalid_status(self):
+        """
+        Test updating a category's status with an invalid value.
+        """
+        url = reverse("categories-update-status", args=[self.category1.id])
+        payload = {"status": "archived"}  # Invalid status
+        response = self.client.patch(url, payload, format="json")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json() == {'status': ['"archived" is not a valid choice.']}
+
+        self.category1.refresh_from_db()
+        assert self.category1.status == "active"  # No change
+
+    def test_update_category_status_missing_status(self):
+        """
+        Test updating a category's status without providing the status field.
+        """
+        url = reverse("categories-update-status", args=[self.category1.id])
+        response = self.client.patch(url, {}, format="json")  # No status provided
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json() == {'status': ['This field may not be null.']}
+
+        self.category1.refresh_from_db()
+        assert self.category1.status == "active"  # No change
+
+    def test_update_category_status_nonexistent_category(self):
+        """
+        Test updating the status of a category that does not exist.
+        """
+        nonexistent_category_id = 9999  # Assume this ID does not exist
+        url = reverse("categories-update-status", args=[nonexistent_category_id])
+        payload = {"status": "inactive"}
+        response = self.client.patch(url, payload, format="json")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json() == {'non_field_errors': ['Invalid category ID.']}
+
+    def test_update_category_status_unauthenticated_user(self):
+        """
+        Test updating a category's status without authentication.
+        """
+        self.client.credentials()  # Remove authentication
+        url = reverse("categories-update-status", args=[self.category1.id])
+        payload = {"status": "inactive"}
+        response = self.client.patch(url, payload, format="json")
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert response.json() == {'detail': 'Authentication credentials were not provided.'}
+
+    def test_update_status_if_regular_user(self):
+        """Test update category status with an unauthorized user."""
+        new_user = User.objects.create_user(
+            username="unauthorized_user", password="testpassword"
+        )
+        self.client.force_authenticate(user=new_user)
+
+        url = reverse("categories-update-status", args=[self.category1.id])
+        payload = {"status": "inactive"}
+        response = self.client.patch(url, payload, format="json")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.json() == {'detail': 'Unauthorized to access this category.'}
+
+    def test_update_in_staff_user(self):
+        """Test update status for a staff user with admin access."""
+        # Log in as staff user
+        self.client.logout()
+        self.staff_user = User.objects.create_user(
+            username="staffuser", password="testpassword", is_staff=True
+        )
+        token_response = self.client.post(
+            reverse("token_obtain_pair"),
+            {"username": "staffuser", "password": "testpassword"},
+        )
+        self.token = token_response.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
+
+        url = reverse("categories-update-status", args=[self.category1.id])
+        payload = {"status": "inactive"}
+        response = self.client.patch(url, payload, format="json")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {'detail': 'Category status updated to inactive.'}
+
+    def test_update_status_in_superuser(self):
+        """Test update status for a superuser."""
+        # Log in as superuser
+        self.client.logout()
+        self.superuser = User.objects.create_superuser(
+            username="superuser", password="testpassword"
+        )
+        token_response = self.client.post(
+            reverse("token_obtain_pair"),
+            {"username": "superuser", "password": "testpassword"},
+        )
+        self.token = token_response.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
+
+        url = reverse("categories-update-status", args=[self.category1.id])
+        payload = {"status": "inactive"}
+        response = self.client.patch(url, payload, format="json")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {'detail': 'Category status updated to inactive.'}
