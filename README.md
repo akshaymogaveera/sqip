@@ -196,10 +196,8 @@ Sample Response:
 
 > List Categories under User
 
-> Group("Tims")
-    > user.groups = [Group("Tims")]
-> Category("Tims")
-    > category.group = Group("Tims")
+> Group("Tims") > user.groups = [Group("Tims")]
+> Category("Tims") > category.group = Group("Tims")
 
 URL: ```api/categories/user/``` (GET)
 
@@ -217,6 +215,7 @@ Sample Response:
 > Flip status of Category.
 
 Will move inactive appointment to the end of the queue.
+Superusers and Group Admin will have access.
 
 URL: ```api/categories/<category-id>/update-status/``` (PATCH)
 
@@ -407,6 +406,8 @@ Sample Response:
 
 > Check-In Appointment
 
+Superusers and Group Admin will have access.
+
 URL: ```/api/appointments/<appointment_id>/check-in/``` (POST)
 
 
@@ -422,6 +423,8 @@ Sample Response:
 
 URL: ```/api/appointments/<appointment_id>/cancel/``` (POST)
 
+Superusers and Group Admin and appointment creator will have access.
+
 
 Sample Response:
 ```
@@ -434,6 +437,8 @@ Sample Response:
 > Move Appointment
 
 URL: ```/api/appointments/<appointment_id>/move/``` (POST)
+
+Superusers and Group Admin will have access.
 
 Request Body
 ```
@@ -455,6 +460,8 @@ Sample Response:
 > Activate Appointment
 
 Will move inactive appointment to the end of the queue.
+
+Superusers and Group Admin will have access.
 
 URL: ```/api/appointments/<appointment_id>/activate/``` (POST)
 
