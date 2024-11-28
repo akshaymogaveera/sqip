@@ -619,7 +619,6 @@ class TestUtilityFunctions:
         count = 1
         for app in appointments:
             app.refresh_from_db()
-            print(app.counter, count, app.status)
             if count == 6:
                 assert app.counter == 5
             if count <= 5:
