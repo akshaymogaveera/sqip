@@ -10,7 +10,7 @@ from main.service import (
     get_unscheduled_appointments_for_superuser,
     get_unscheduled_appointments_for_user,
     get_user_appointments,
-    set_appointment_status,
+    set_appointment_status_and_update_counter,
 )
 from rest_framework.permissions import IsAuthenticated
 
@@ -311,7 +311,7 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         appointment_id = query_params_serializer.validated_data["appointment_id"]
 
         # Set appointment status to "checkin"
-        success, message = set_appointment_status(
+        success, message = set_appointment_status_and_update_counter(
             appointment_id, "checkin", self.request.user, ignore_status=True
         )
 
@@ -357,7 +357,7 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
 
 
         # Set appointment status to "cancel"
-        success, message = set_appointment_status(
+        success, message = set_appointment_status_and_update_counter(
             appointment_id, "cancel", self.request.user, ignore_status=True
         )
 

@@ -213,8 +213,9 @@ def check_if_user_has_authorized_category_access(
     return appointment.category in authorized_categories
 
 
-def set_appointment_status(appointment_id, status, user, ignore_status=False):
+def set_appointment_status_and_update_counter(appointment_id, status, user, ignore_status=False):
     """Set the status of an appointment and update the 'updated_by' field.
+    Decrement the counter of all the appointments in the queue above it, if status is updated(except "active").
 
     Args:
         appointment_id (int): ID of the appointment to update.
@@ -238,6 +239,11 @@ def set_appointment_status(appointment_id, status, user, ignore_status=False):
     appointment.status = status
     appointment.updated_by = user
     appointment.save()  # Save the changes to the database
+
+    # Decrement all appointments above it.
+    if appointment.status != "active":
+        adjust_appointment_counter(appointment, False, appointment.counter)
+
     return True, f"Appointment status updated to '{status}' successfully."
 
 

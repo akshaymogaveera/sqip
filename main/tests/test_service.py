@@ -16,7 +16,7 @@ from main.service import (
     get_unscheduled_appointments_for_superuser,
     get_unscheduled_appointments_for_user,
     get_user_appointments,
-    set_appointment_status,
+    set_appointment_status_and_update_counter,
     get_category
 )
 
@@ -565,7 +565,7 @@ class TestUtilityFunctions:
         new_status = (
             "checkin"  # Assuming 'completed' is a valid status in STATUS_CHOICES
         )
-        success, message = set_appointment_status(
+        success, message = set_appointment_status_and_update_counter(
             self.unscheduled_appointment_1.id, new_status, self.user
         )
 
@@ -576,6 +576,58 @@ class TestUtilityFunctions:
         self.unscheduled_appointment_1.refresh_from_db()
         assert self.unscheduled_appointment_1.status == new_status
         assert self.unscheduled_appointment_1.updated_by == self.user
+
+    def test_set_appointment_status_success_check_decrement(self):
+        """Test updating appointment status with a valid choice an test decrement"""
+        new_status = "checkin"
+        appointments = [
+            Appointment.objects.create(
+                organization=self.organization_active,
+                category=self.category_active,
+                status="active",
+                counter=i,
+                is_scheduled=False,
+                user=self.user,
+            )
+            for i in range(1,10)
+        ]
+
+        for app in appointments:
+            set_appointment_status_and_update_counter(
+                app.id, new_status, self.user
+            )
+        for app in appointments:
+            app.refresh_from_db()
+            assert app.counter == 1
+
+        # Check if done between the appointments
+        appointments = [
+            Appointment.objects.create(
+                organization=self.organization_active,
+                category=self.category_active,
+                status="active",
+                counter=i,
+                is_scheduled=False,
+                user=self.user,
+            )
+            for i in range(1,10)
+        ]
+
+        set_appointment_status_and_update_counter(
+                appointments[4].id, new_status, self.user
+            )
+        count = 1
+        for app in appointments:
+            app.refresh_from_db()
+            print(app.counter, count, app.status)
+            if count == 6:
+                assert app.counter == 5
+            if count <= 5:
+                assert app.counter == count
+            else:
+                assert app.counter == count - 1
+            count+=1
+
 
     def test_set_appointment_status_success_if_ignore_status(self):
         """Test updating appointment status with a valid choice."""
@@ -592,7 +644,7 @@ class TestUtilityFunctions:
             updated_by=self.user,
         )
 
-        success, message = set_appointment_status(
+        success, message = set_appointment_status_and_update_counter(
             appointment.id, new_status, self.user, ignore_status=True
         )
 
@@ -607,7 +659,7 @@ class TestUtilityFunctions:
     def test_set_appointment_status_invalid_status(self):
         """Test updating appointment status with an invalid choice."""
         invalid_status = "invalid_status"
-        success, message = set_appointment_status(
+        success, message = set_appointment_status_and_update_counter(
             self.unscheduled_appointment_1.id, invalid_status, self.user
         )
 
@@ -622,7 +674,7 @@ class TestUtilityFunctions:
         """Test updating status when appointment does not exist."""
         non_existent_id = 9999  # An ID that does not exist in the database
         new_status = "checkin"
-        success, message = set_appointment_status(
+        success, message = set_appointment_status_and_update_counter(
             non_existent_id, new_status, self.user
         )
 
