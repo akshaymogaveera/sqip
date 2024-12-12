@@ -14,19 +14,21 @@ from main.service import (
 )
 from rest_framework.permissions import IsAuthenticated
 
-from rest_framework import generics, viewsets
+from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.decorators import action
-from main.models import Appointment, Organization
+from main.models import Appointment
 from main.appointments.serializers import (
     AppointmentIDValidatorSerializer,
     AppointmentListValidate,
     AppointmentSerializer,
+    CreateAppointmentSerializer,
     MakeAppointmentSerializer,
     MoveAppointmentIDValidatorSerializer,
     ValidateAppointmentInput,
     AppointmentListQueryParamsSerializer,
+    ValidateScheduledAppointmentInput,
 )
 from rest_framework.pagination import PageNumberPagination
 import logging
@@ -467,3 +469,44 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         return Response({}, status=status.HTTP_200_OK)
 
 
+    @action(detail=False, methods=["post"], url_path="schedule")
+    @view_set_error_handler
+    def schedule(self, request):
+        """
+        POST /appointments/schedule/
+        (EST)
+        {
+            "user": 1,
+            "category": 7,
+            "organization": 1,
+            "scheduled_time": "2024-12-02T10:15"
+        }
+
+        """
+
+        # Input validation
+        input_serializer = ValidateScheduledAppointmentInput(
+            data=request.data, context={"request": request}
+        )
+        input_serializer.is_valid(raise_exception=True)
+
+        # Main serializer validation
+        serializer = CreateAppointmentSerializer(
+            data=request.data
+        )
+
+        logger.debug(
+            "Input data validated. Appointment data: %s",
+            request.data
+        )
+
+        serializer.is_valid(raise_exception=True)
+        serializer.validated_data["scheduled_end_time"] = input_serializer.validated_data["scheduled_end_time"]
+
+        # Save new appointment
+        serializer.save(is_scheduled=True, status="active")
+        logger.info(
+            "Appointment successfully created for user %d.",
+            self.request.user.id
+        )
+        return Response(serializer.data, status=status.HTTP_201_CREATED)

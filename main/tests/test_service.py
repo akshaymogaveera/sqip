@@ -16,9 +16,13 @@ from main.service import (
     get_unscheduled_appointments_for_superuser,
     get_unscheduled_appointments_for_user,
     get_user_appointments,
+    is_slot_available,
     set_appointment_status_and_update_counter,
     get_category
 )
+from datetime import datetime, timedelta
+from pytz import timezone
+from main.models import Appointment, Category
 
 
 @pytest.mark.django_db
@@ -87,7 +91,7 @@ class TestUtilityFunctions:
         self.other_category_active = Category.objects.create(
             organization=self.organization_active,
             status="active",
-            type="other",
+            type="online",
             created_by=self.user,
             group=self.other_group,
         )
@@ -520,7 +524,7 @@ class TestUtilityFunctions:
         unauthorized_category = Category.objects.create(
             organization=self.organization_active,
             status="active",
-            type="unauthorized",
+            type="online",
             created_by=self.user,
             group=group,
         )
@@ -821,3 +825,157 @@ class TestGetFirstCounterForAppointment:
 
         first_counter = get_first_counter_for_appointment(organization, category)
         assert first_counter == 0
+
+@pytest.mark.django_db
+class TestIsSlotAvailable:
+    """Tests for the is_slot_available function."""
+
+    @pytest.fixture
+    def category(self):
+        """Fixture to create a sample category."""
+
+        self.created_by = User.objects.create_user(username="testuser", password="password")
+        self.organization = Organization.objects.create(name="Test Organization", created_by=self.created_by)
+        """Set up common test data."""
+
+        self.category = Category(
+            name="Test Category",
+            opening_hours={
+                "Monday": [["09:00", "17:00"]],
+                "Tuesday": [["09:00", "17:00"]],
+                "Wednesday": [["09:00", "17:00"]],
+                "Thursday": [["09:00", "17:00"]],
+                "Friday": [["09:00", "17:00"]],
+                "Saturday": [],
+                "Sunday": [["10:00", "14:00"]],  # Ensure non-empty range
+            },
+            break_hours={
+            "Monday": [["12:00", "13:00"]],
+            "Thursday": [["12:00", "13:00"]],
+            },
+            organization=self.organization,
+            created_by=self.created_by,
+            is_scheduled=True,
+            time_interval_per_appointment = timedelta(minutes=30),
+            time_zone = "America/New_York",
+            status="active"
+        )
+
+        self.category.save()
+
+        return self.category
+
+    @pytest.fixture
+    def active_appointment(self, category):
+        """Fixture to create an active appointment."""
+        scheduled_time = datetime(2024, 11, 28, 10, 0, tzinfo=timezone("UTC"))
+        scheduled_end_time = scheduled_time + category.time_interval_per_appointment
+        return Appointment.objects.create(
+            category=category,
+            scheduled_time=scheduled_time,
+            status="active",
+            organization=self.organization,
+            user=self.created_by,
+            is_scheduled=True,
+            scheduled_end_time=scheduled_end_time
+        )
+    
+    def test_no_overlapping_appointments(self, category):
+        """Test when no appointments overlap with the scheduled time."""
+        scheduled_time = datetime(2024, 11, 28, 11, 0, tzinfo=timezone("UTC"))
+        result = is_slot_available(category, scheduled_time)
+        assert result is True, "Expected slot to be available when no overlapping appointments exist."
+
+    def test_overlapping_appointment(self, category, active_appointment):
+        """Test when an appointment overlaps with the scheduled time."""
+        # Overlapping with the active_appointment (10:00 to 10:30)
+        scheduled_time = datetime(2024, 11, 28, 10, 15, tzinfo=timezone("UTC"))
+        print(f"Testing availability for: {scheduled_time}")
+        result = is_slot_available(category, scheduled_time)
+        print(f"Slot availability result: {result}")
+        assert result is False, "Expected slot to be unavailable due to overlapping appointment."
+
+    def test_overlapping_appointment_1(self, category, active_appointment):
+        """Test when an appointment overlaps with the scheduled time."""
+        # Overlapping with the active_appointment (10:00 to 10:30)
+        scheduled_time = datetime(2024, 11, 28, 10, 10, tzinfo=timezone("UTC"))
+        print(f"Testing availability for: {scheduled_time}")
+        result = is_slot_available(category, scheduled_time)
+        print(f"Slot availability result: {result}")
+        assert result is False, "Expected slot to be unavailable due to overlapping appointment."
+
+    def test_overlapping_appointment_2(self, category, active_appointment):
+        """Test when an appointment overlaps with the scheduled time."""
+        # Overlapping with the active_appointment (10:00 to 10:30)
+        scheduled_time = datetime(2024, 11, 28, 10, 1, tzinfo=timezone("UTC"))
+        print(f"Testing availability for: {scheduled_time}")
+        result = is_slot_available(category, scheduled_time)
+        print(f"Slot availability result: {result}")
+        assert result is False, "Expected slot to be unavailable due to overlapping appointment."
+
+    def test_overlapping_appointment_3(self, category, active_appointment):
+        """Test when an appointment overlaps with the scheduled time."""
+        # Overlapping with the active_appointment (10:00 to 10:30)
+        scheduled_time = datetime(2024, 11, 28, 10, 29, tzinfo=timezone("UTC"))
+        print(f"Testing availability for: {scheduled_time}")
+        result = is_slot_available(category, scheduled_time)
+        print(f"Slot availability result: {result}")
+        assert result is False, "Expected slot to be unavailable due to overlapping appointment."
+
+    def test_overlapping_appointment_4(self, category, active_appointment):
+        """Test when an appointment overlaps with the scheduled time."""
+        # Overlapping with the active_appointment (10:00 to 10:30)
+        scheduled_time = datetime(2024, 11, 28, 10, 20, tzinfo=timezone("UTC"))
+        print(f"Testing availability for: {scheduled_time}")
+        result = is_slot_available(category, scheduled_time)
+        print(f"Slot availability result: {result}")
+        assert result is False, "Expected slot to be unavailable due to overlapping appointment."
+
+    def test_overlapping_appointment_before(self, category, active_appointment):
+        """Test when an appointment overlaps with the scheduled time."""
+        # Overlapping with the active_appointment (10:00 to 10:30)
+        scheduled_time = datetime(2024, 11, 28, 9, 45, tzinfo=timezone("UTC"))
+        print(f"Testing availability for: {scheduled_time}")
+        result = is_slot_available(category, scheduled_time)
+        print(f"Slot availability result: {result}")
+        assert result is False, "Expected slot to be unavailable due to overlapping appointment."
+
+    def test_edge_case_start_equals_existing_start(self, category, active_appointment):
+        """Test when the scheduled time starts exactly at an existing appointment's start time."""
+        scheduled_time = datetime(2024, 11, 28, 10, 0, tzinfo=timezone("UTC"))
+        result = is_slot_available(category, scheduled_time)
+        assert result is False, "Expected slot to be unavailable when start time matches an existing appointment."
+
+    def test_edge_case_end_equals_existing_start(self, category, active_appointment):
+        """Test when the scheduled time ends exactly at an existing appointment's start time."""
+        scheduled_time = datetime(2024, 11, 28, 9, 30, tzinfo=timezone("UTC"))  # Ends at 10:00
+        result = is_slot_available(category, scheduled_time)
+        assert result is True, "Expected slot to be available when it ends exactly at an existing appointment's start time."
+
+    def test_edge_case_end_equals_existing_end(self, category, active_appointment):
+        """Test when the scheduled time starts exactly at an existing appointment's end time."""
+        scheduled_time = datetime(2024, 11, 28, 10, 30, tzinfo=timezone("UTC"))  # Ends at 10:00
+        result = is_slot_available(category, scheduled_time)
+        assert result is True, "Expected slot to be available when it ends exactly at an existing appointment's start time."
+
+    def test_different_category(self, category, active_appointment):
+        """Test when appointments exist in a different category."""
+        another_category = Category.objects.create(
+            name="Another Category",
+            time_interval_per_appointment=timedelta(minutes=30),
+            created_by=self.created_by,
+            time_zone="UTC",
+            status="active",
+            organization=self.organization
+        )
+        scheduled_time = datetime(2024, 11, 28, 10, 15, tzinfo=timezone("UTC"))
+        result = is_slot_available(another_category, scheduled_time)
+        assert result is True, "Expected slot to be available when appointments exist in a different category."
+
+    def test_appointment_with_different_status(self, category, active_appointment):
+        """Test when an appointment has a non-active status."""
+        active_appointment.status = "completed"
+        active_appointment.save()
+        scheduled_time = datetime(2024, 11, 28, 10, 15, tzinfo=timezone("UTC"))
+        result = is_slot_available(category, scheduled_time)
+        assert result is True, "Expected slot to be available when overlapping appointment is not active."

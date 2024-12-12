@@ -187,7 +187,7 @@ class TestListScheduledAppointments:
 
         self.category3 = Category.objects.create(
             organization=self.organization,
-            status="drive-thru",
+            status="active",
             type="inperson",
             created_by=self.user,
         )

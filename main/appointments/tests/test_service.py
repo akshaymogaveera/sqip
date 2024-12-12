@@ -1,7 +1,17 @@
+from datetime import datetime, timedelta
 import pytest
+import pytz
 from main.models import Appointment, Category, Organization
-from main.appointments.service import handle_appointment_scheduling, move_appointment, activate_appointment
+from main.appointments.service import (
+    handle_appointment_scheduling,
+    is_within_opening_hours,
+    move_appointment,
+    activate_appointment,
+    validate_scheduled_appointment,
+    validate_time_alignment,
+)
 from django.contrib.auth.models import User
+from rest_framework.exceptions import ValidationError
 
 from main.service import adjust_appointment_counter
 
@@ -542,7 +552,6 @@ class TestAdjustAppointmentCounter:
         ), f"Expected counters: {expected_counters}, but got: {counters}"
 
 
-
 @pytest.mark.django_db
 class TestActivateAppointment:
     """
@@ -671,3 +680,390 @@ class TestActivateAppointment:
 
         # Ensure scheduling logic was called
         mock_handle_scheduling.assert_called_once_with(appointment.as_dict())
+
+
+class TestIsWithinOpeningHours:
+    """Test suite for the `is_within_opening_hours` function."""
+
+    def setup_method(self):
+        """Setup common test variables."""
+        self.category_timezone = "America/New_York"  # Example timezone
+        self.tz = pytz.timezone(self.category_timezone)  # Get the timezone object
+
+    def test_within_opening_hours(self):
+        """Test case where scheduled time is within valid opening hours."""
+        opening_hours = [["09:00", "17:00"]]
+        break_hours = [["12:00", "13:00"]]
+        scheduled_time = datetime(2024, 11, 28, 10, 0)  # 10:00 AM
+        
+        result = is_within_opening_hours(scheduled_time, opening_hours, break_hours, self.category_timezone)
+        assert result is True, "Scheduled time should be valid during opening hours."
+
+    def test_outside_opening_hours(self):
+        """Test case where scheduled time is outside valid opening hours."""
+        opening_hours = [["09:00", "17:00"]]
+        break_hours = [["12:00", "13:00"]]
+        scheduled_time = self.tz.localize(datetime(2024, 11, 28, 18, 0))  # 6:00 PM (after hours)
+        
+        result = is_within_opening_hours(scheduled_time, opening_hours, break_hours, self.category_timezone)
+        assert result is False, "Scheduled time should be invalid outside opening hours."
+
+    def test_during_break_hours(self):
+        """Test case where scheduled time falls within break hours."""
+        opening_hours = [["09:00", "17:00"]]
+        break_hours = [["12:00", "13:00"]]
+        scheduled_time = datetime(2024, 11, 28, 12, 30)  # 12:30 PM (break time)
+        
+        result = is_within_opening_hours(scheduled_time, opening_hours, break_hours, self.category_timezone)
+        assert result is False, "Scheduled time should be invalid during break hours."
+
+    def test_edge_case_start_of_opening_hours(self):
+        """Test case where scheduled time is exactly at the start of opening hours."""
+        opening_hours = [["09:00", "17:00"]]
+        break_hours = [["12:00", "13:00"]]
+        scheduled_time = self.tz.localize(datetime(2024, 11, 28, 9, 0))  # 9:00 AM (start time)
+        
+        result = is_within_opening_hours(scheduled_time, opening_hours, break_hours, self.category_timezone)
+        assert result is True, "Scheduled time should be valid at the start of opening hours."
+
+    def test_edge_case_end_of_opening_hours(self):
+        """Test case where scheduled time is exactly at the end of opening hours."""
+        opening_hours = [["09:00", "17:00"]]
+        break_hours = [["12:00", "13:00"]]
+        scheduled_time = self.tz.localize(datetime(2024, 11, 28, 17, 0))  # 5:00 PM (end time)
+        
+        result = is_within_opening_hours(scheduled_time, opening_hours, break_hours, self.category_timezone)
+        assert result is False, "Scheduled time should be invalid at the end of opening hours."
+
+    def test_empty_opening_hours(self):
+        """Test case where opening hours are empty."""
+        opening_hours = []
+        break_hours = [["12:00", "13:00"]]
+        scheduled_time = self.tz.localize(datetime(2024, 11, 28, 10, 0))  # 10:00 AM
+        
+        result = is_within_opening_hours(scheduled_time, opening_hours, break_hours, self.category_timezone)
+        assert result is False, "Scheduled time should be invalid when opening hours are empty."
+
+    def test_empty_break_hours(self):
+        """Test case where break hours are empty."""
+        opening_hours = [["09:00", "17:00"]]
+        break_hours = []
+        scheduled_time = self.tz.localize(datetime(2024, 11, 28, 12, 30))  # 12:30 PM
+        
+        result = is_within_opening_hours(scheduled_time, opening_hours, break_hours, self.category_timezone)
+        assert result is True, "Scheduled time should be valid when break hours are empty."
+
+    def test_timezone_naive_scheduled_time(self):
+        """Test case where the scheduled time is naive (no timezone information)."""
+        opening_hours = [["09:00", "17:00"]]
+        break_hours = [["12:00", "13:00"]]
+        scheduled_time = datetime(2024, 11, 28, 10, 0)  # Naive datetime
+        
+        result = is_within_opening_hours(scheduled_time, opening_hours, break_hours, self.category_timezone)
+        assert result is True, "Function should correctly handle naive scheduled time."
+
+    def test_invalid_timezone(self):
+        """Test case with an invalid timezone string."""
+        opening_hours = [["09:00", "17:00"]]
+        break_hours = [["12:00", "13:00"]]
+        scheduled_time = self.tz.localize(datetime(2024, 11, 28, 10, 0))  # 10:00 AM
+
+        with pytest.raises(pytz.UnknownTimeZoneError):
+            is_within_opening_hours(scheduled_time, opening_hours, break_hours, "Invalid/Timezone")
+
+
+    def test_multiple_opening_ranges(self):
+        """Test case where multiple opening ranges exist."""
+        opening_hours = [["09:00", "12:00"], ["13:00", "17:00"]]
+        break_hours = [["12:00", "13:00"]]
+        scheduled_time = self.tz.localize(datetime(2024, 11, 28, 14, 0))  # 2:00 PM
+
+        result = is_within_opening_hours(scheduled_time, opening_hours, break_hours, self.category_timezone)
+        assert result is True, "Scheduled time should be valid within any of the opening ranges."
+
+    def test_outside_all_opening_ranges(self):
+        """Test case where scheduled time is outside all opening ranges."""
+        opening_hours = [["09:00", "12:00"], ["13:00", "17:00"]]
+        break_hours = [["12:00", "13:00"]]
+        scheduled_time = self.tz.localize(datetime(2024, 11, 28, 18, 0))  # 6:00 PM
+
+        result = is_within_opening_hours(scheduled_time, opening_hours, break_hours, self.category_timezone)
+        assert result is False, "Scheduled time should be invalid outside all opening ranges."
+
+    def test_multiple_break_ranges(self):
+        """Test case where multiple break ranges exist."""
+        opening_hours = [["09:00", "17:00"]]
+        break_hours = [["10:30", "11:00"], ["14:00", "14:30"]]
+        scheduled_time = self.tz.localize(datetime(2024, 11, 28, 14, 15))  # 2:15 PM (during break)
+
+        result = is_within_opening_hours(scheduled_time, opening_hours, break_hours, self.category_timezone)
+        assert result is False, "Scheduled time should be invalid during any of the break ranges."
+
+    def test_edge_case_end_of_break_hours(self):
+        """Test case where scheduled time is exactly at the end of break hours."""
+        opening_hours = [["09:00", "17:00"]]
+        break_hours = [["12:00", "13:00"]]
+        scheduled_time = self.tz.localize(datetime(2024, 11, 28, 13, 0))  # 1:00 PM (end of break)
+
+        result = is_within_opening_hours(scheduled_time, opening_hours, break_hours, self.category_timezone)
+        assert result is True, "Scheduled time should be valid exactly at the end of break hours."
+
+    def test_spanning_opening_hours(self):
+        """Test case where opening hours span past midnight."""
+        opening_hours = [["22:00", "02:00"]]  # 10:00 PM to 2:00 AM
+        break_hours = [["23:30", "00:30"]]  # Break from 11:30 PM to 12:30 AM
+        scheduled_time = self.tz.localize(datetime(2024, 11, 29, 0, 15))  # 12:15 AM
+
+        result = is_within_opening_hours(scheduled_time, opening_hours, break_hours, self.category_timezone)
+        assert result is False, "Scheduled time should be invalid during a spanning break range."
+
+    def test_exactly_on_midnight(self):
+        """Test case where scheduled time is exactly at midnight."""
+        opening_hours = [["00:00", "02:00"]]  # Midnight to 2:00 AM
+        break_hours = []
+        scheduled_time = self.tz.localize(datetime(2024, 11, 29, 0, 0))  # 12:00 AM
+
+        result = is_within_opening_hours(scheduled_time, opening_hours, break_hours, self.category_timezone)
+        assert result is True, "Scheduled time should be valid exactly at midnight within opening hours."
+
+    def test_timezone_conversion(self):
+        """Test case for scheduled time in a different timezone."""
+        opening_hours = [["09:00", "17:00"]]
+        break_hours = [["12:00", "13:00"]]
+        scheduled_time = pytz.timezone("UTC").localize(datetime(2024, 11, 28, 14, 0))  # 2:00 PM UTC
+
+        result = is_within_opening_hours(scheduled_time, opening_hours, break_hours, self.category_timezone)
+        assert result is True, "Function should correctly handle timezones and validate the scheduled time."
+
+    def test_large_opening_hours_range(self):
+        """Test case where opening hours cover an entire day."""
+        opening_hours = [["00:00", "23:59"]]  # Open all day
+        break_hours = [["12:00", "13:00"]]
+        scheduled_time = self.tz.localize(datetime(2024, 11, 28, 16, 0))  # 4:00 PM
+
+        result = is_within_opening_hours(scheduled_time, opening_hours, break_hours, self.category_timezone)
+        assert result is True, "Scheduled time should be valid for large opening ranges outside break hours."
+
+    def test_empty_opening_and_break_hours(self):
+        """Test case where both opening and break hours are empty."""
+        opening_hours = []
+        break_hours = []
+        scheduled_time = self.tz.localize(datetime(2024, 11, 28, 10, 0))  # 10:00 AM
+
+        result = is_within_opening_hours(scheduled_time, opening_hours, break_hours, self.category_timezone)
+        assert result is False, "Scheduled time should be invalid when both opening and break hours are empty."
+
+    def test_naive_datetime_error(self):
+        """Test case where scheduled time is naive and should fail."""
+        opening_hours = [["09:00", "17:00"]]
+        break_hours = [["12:00", "13:00"]]
+        scheduled_time = datetime(2024, 11, 28, 10, 0)  # Naive datetime
+
+        assert is_within_opening_hours(scheduled_time, opening_hours, break_hours, self.category_timezone)
+
+    def test_invalid_time_range_format(self):
+        """Test case with an invalid time range format."""
+        opening_hours = [["09:00"]]  # Invalid format (only start time provided)
+        break_hours = [["12:00", "13:00"]]
+        scheduled_time = self.tz.localize(datetime(2024, 11, 28, 10, 0))  # 10:00 AM
+
+        with pytest.raises(IndexError):
+            is_within_opening_hours(scheduled_time, opening_hours, break_hours, self.category_timezone)
+
+class TestValidateTimeAlignment:
+    """Test suite for the updated `validate_time_alignment` function."""
+
+    def test_valid_time_matches_generated_slots(self, mocker):
+        """Test that valid times matching the generated slots pass validation."""
+        opening_hours = [["09:00", "17:00"]]
+        break_hours = [["12:00", "13:00"]]
+        mocker.patch("main.appointments.service.generate_time_slots", return_value=[
+            ["09:00", "09:15"], ["09:15", "09:30"], ["13:00", "13:15"]
+        ])
+        scheduled_time = datetime(2024, 11, 28, 9, 15)
+        validate_time_alignment(scheduled_time, 15, opening_hours, break_hours)
+
+    def test_invalid_time_does_not_match_generated_slots(self, mocker):
+        """Test that times not matching the generated slots fail validation."""
+        opening_hours = [["09:00", "17:00"]]
+        break_hours = [["12:00", "13:00"]]
+        mocker.patch("main.appointments.service.generate_time_slots", return_value=[
+            ["09:00", "09:15"], ["09:15", "09:30"], ["13:00", "13:15"]
+        ])
+        scheduled_time = datetime(2024, 11, 28, 9, 10)
+
+        with pytest.raises(ValidationError, match="Scheduled time must match one of the available start times: 09:00, 09:15, 13:00"):
+            validate_time_alignment(scheduled_time, 15, opening_hours, break_hours)
+
+    def test_time_during_break_hours(self, mocker):
+        """Test that a valid time during break hours fails validation."""
+        opening_hours = [["09:00", "17:00"]]
+        break_hours = [["12:00", "13:00"]]
+        mocker.patch("main.appointments.service.generate_time_slots", return_value=[
+            ["09:00", "09:15"], ["09:15", "09:30"]
+        ])
+        scheduled_time = datetime(2024, 11, 28, 12, 0)
+
+        with pytest.raises(ValidationError, match="Scheduled time must match one of the available start times"):
+            validate_time_alignment(scheduled_time, 15, opening_hours, break_hours)
+
+    def test_time_outside_opening_hours(self, mocker):
+        """Test that a time outside opening hours fails validation."""
+        opening_hours = [["09:00", "17:00"]]
+        break_hours = [["12:00", "13:00"]]
+        mocker.patch("main.appointments.service.generate_time_slots", return_value=[
+            ["09:00", "09:15"], ["09:15", "09:30"], ["13:00", "13:15"]
+        ])
+        scheduled_time = datetime(2024, 11, 28, 8, 45)
+
+        with pytest.raises(ValidationError, match="Scheduled time must match one of the available start times"):
+            validate_time_alignment(scheduled_time, 15, opening_hours, break_hours)
+
+    def test_invalid_time_with_multiple_opening_ranges(self, mocker):
+        """Test an invalid time with multiple opening hour ranges."""
+        opening_hours = [["09:00", "12:00"], ["13:00", "17:00"]]
+        break_hours = [["12:00", "13:00"]]
+        mocker.patch("main.appointments.service.generate_time_slots", return_value=[
+            ["09:00", "09:15"], ["09:15", "09:30"], ["13:00", "13:15"]
+        ])
+        scheduled_time = datetime(2024, 11, 28, 12, 15)
+
+        with pytest.raises(ValidationError, match="Scheduled time must match one of the available start times"):
+            validate_time_alignment(scheduled_time, 15, opening_hours, break_hours)
+
+    def test_no_opening_hours(self, mocker):
+        """Test when no opening hours are provided."""
+        opening_hours = []
+        break_hours = [["12:00", "13:00"]]
+        mocker.patch("main.appointments.service.generate_time_slots", return_value=[])
+        scheduled_time = datetime(2024, 11, 28, 9, 0)
+
+        with pytest.raises(ValidationError, match="Scheduled time must match one of the available start times"):
+            validate_time_alignment(scheduled_time, 15, opening_hours, break_hours)
+
+    def test_no_break_hours(self, mocker):
+        """Test a valid time when no break hours are provided."""
+        opening_hours = [["09:00", "17:00"]]
+        break_hours = []
+        mocker.patch("main.appointments.service.generate_time_slots", return_value=[
+            ["09:00", "09:15"], ["09:15", "09:30"]
+        ])
+        scheduled_time = datetime(2024, 11, 28, 9, 15)
+        validate_time_alignment(scheduled_time, 15, opening_hours, break_hours)
+
+    def test_slot_at_end_of_opening_hours(self, mocker):
+        """Test a time slot at the end of the opening hours."""
+        opening_hours = [["09:00", "17:00"]]
+        break_hours = [["12:00", "13:00"]]
+        mocker.patch("main.appointments.service.generate_time_slots", return_value=[
+            ["09:00", "09:15"], ["16:45", "17:00"]
+        ])
+        scheduled_time = datetime(2024, 11, 28, 16, 45)
+        validate_time_alignment(scheduled_time, 15, opening_hours, break_hours)
+
+
+@pytest.mark.django_db
+class TestValidateScheduledAppointment:
+    """Test suite for the `validate_scheduled_appointment` function."""
+
+    def setup_method(self):
+        self.created_by = User.objects.create_user(username="testuser", password="password")
+        self.organization = Organization.objects.create(name="Test Organization", created_by=self.created_by)
+        """Set up common test data."""
+
+        self.category = Category(
+            name="Test Category",
+            opening_hours={
+                "Monday": [["09:00", "17:00"]],
+                "Tuesday": [["09:00", "17:00"]],
+                "Wednesday": [["09:00", "17:00"]],
+                "Thursday": [["09:00", "17:00"]],
+                "Friday": [["09:00", "17:00"]],
+                "Saturday": [],
+                "Sunday": [["10:00", "14:00"]],  # Ensure non-empty range
+            },
+            break_hours={
+            "Monday": [["12:00", "13:00"]],
+            "Thursday": [["12:00", "13:00"]],
+            },
+            organization=self.organization,
+            created_by=self.created_by,
+            is_scheduled=True,
+            time_interval_per_appointment = timedelta(minutes=15),
+            time_zone = "America/New_York",
+            status="active"
+        )
+        self.category.save()
+
+    def test_valid_appointment(self, mocker):
+        """Test a valid appointment within opening hours and not during break hours."""
+        scheduled_time = datetime(2024, 11, 28, 9, 15)
+        self.category.opening_hours["Thursday"] = [["09:00", "17:00"]]
+        self.category.break_hours["Thursday"] = [["12:00", "13:00"]]
+
+        with mocker.patch("main.appointments.service.is_slot_available", return_value=True):
+            validate_scheduled_appointment(self.category, scheduled_time)
+
+    def test_invalid_time_alignment(self):
+        """Test appointment with invalid time alignment."""
+        scheduled_time = datetime(2024, 11, 28, 9, 17)
+
+        with pytest.raises(ValidationError):
+            validate_scheduled_appointment(self.category, scheduled_time)
+
+    def test_no_opening_hours_for_weekday(self):
+        """Test appointment on a weekday with no opening hours defined."""
+        scheduled_time = datetime(2024, 11, 30, 10, 0)  # Saturday
+
+        with pytest.raises(ValidationError, match="Not accepting appointments for Saturday."):
+            validate_scheduled_appointment(self.category, scheduled_time)
+
+    def test_outside_opening_hours(self):
+        """Test appointment outside opening hours."""
+        scheduled_time = datetime(2024, 11, 28, 8, 45)  # Before 9:00 opening
+
+        with pytest.raises(ValidationError, match="Scheduled time is not within allowed hours."):
+            validate_scheduled_appointment(self.category, scheduled_time)
+
+    def test_during_break_hours(self):
+        """Test appointment during break hours."""
+        scheduled_time = datetime(2024, 11, 28, 12, 30)  # During break
+
+        with pytest.raises(ValidationError, match="Scheduled time is not within allowed hours."):
+            validate_scheduled_appointment(self.category, scheduled_time)
+
+    def test_slot_unavailable(self, mocker):
+        """Test appointment when the time slot is already taken."""
+        scheduled_time = datetime(2024, 11, 28, 9, 15)
+        with mocker.patch("main.appointments.service.is_slot_available", return_value=False):
+            with pytest.raises(ValidationError, match="The selected time slot is already taken."):
+                validate_scheduled_appointment(self.category, scheduled_time)
+
+    def test_valid_with_multiple_ranges(self, mocker):
+        """Test valid appointment with multiple opening and break hour ranges."""
+        self.category.opening_hours["Monday"] = [["09:00", "12:00"], ["13:00", "17:00"]]
+        self.category.break_hours["Monday"] = [["12:00", "13:00"]]
+        scheduled_time = datetime(2024, 11, 25, 14, 0)  # Monday, within second range
+
+        with mocker.patch("main.appointments.service.is_slot_available", return_value=True):
+            with pytest.raises(ValidationError, match='Scheduled time must match one of the available start times: 09:00, 09:15, 09:30, 09:45, 10:00, 10:15, 10:30, 10:45, 11:00, 11:15, 11:30, 11:45.'):
+                validate_scheduled_appointment(self.category, scheduled_time)
+
+    def test_invalid_with_multiple_ranges(self):
+        """Test invalid appointment with multiple opening and break hour ranges."""
+        self.category.opening_hours["Monday"] = [["09:00", "12:00"], ["13:00", "17:00"]]
+        self.category.break_hours["Monday"] = [["12:00", "13:00"]]
+        scheduled_time = datetime(2024, 11, 25, 12, 30)  # During break
+
+        with pytest.raises(ValidationError, match="Scheduled time is not within allowed hours."):
+            validate_scheduled_appointment(self.category, scheduled_time)
+
+    def test_time_zone_conversion(self, mocker):
+        """Test validation with time zone differences."""
+        self.category.time_zone = "US/Eastern"
+        scheduled_time = datetime(2024, 11, 28, 9, 15)  # Valid in UTC
+        self.category.opening_hours["Thursday"] = [["04:00", "12:00"]]  # Eastern time (UTC -5)
+
+        with mocker.patch("main.appointments.service.is_slot_available", return_value=True):
+            validate_scheduled_appointment(self.category, scheduled_time)
+            

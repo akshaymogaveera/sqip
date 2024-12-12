@@ -236,7 +236,7 @@ Sample Response:
 ```
 ------------------------------------------------------------------------------------------------
 
-> Create Appointment
+> Create Unscheduled Appointment
 
 URL: ```/api/appointments/create/``` (POST)
 ```
@@ -262,6 +262,138 @@ Sample Response:
     "is_scheduled": false,
     "estimated_time": null
 }
+```
+
+------------------------------------------------------------------------------------------------
+
+> Create Scheduled Appointment
+
+Before creating scheduled appointments, we need to create a category that has all the data present, for eg,
+
+It should have all the necessary information like, opening hours, break hours, time_interval_per_appointment, max_advance_days
+We also have some validation in place, when you fill out the opening and break hours.
+
+Take a look below for reference.
+
+```
+{
+    "id": 7,
+    "name": "Arfa Sceduled - 1",
+    "status": "active",
+    "type": "inperson",
+    "estimated_time": null,
+    "description": "Dining",
+    "created_at": "2024-11-26T04:56:10Z",
+    "is_scheduled": true,
+    "time_zone": "Canada/Eastern",
+    "opening_hours": {
+        "Monday": [
+            [
+                "09:00",
+                "17:00"
+            ]
+        ],
+        "Tuesday": [
+            [
+                "09:00",
+                "17:00"
+            ]
+        ],
+        "Wednesday": [
+            [
+                "09:00",
+                "17:00"
+            ]
+        ],
+        "Thursday": [
+            [
+                "09:00",
+                "17:00"
+            ]
+        ],
+        "Friday": [
+            [
+                "09:00",
+                "17:00"
+            ]
+        ],
+        "Saturday": [
+            [
+                "10:00",
+                "14:00"
+            ]
+        ],
+        "Sunday": []
+    },
+    "break_hours": {
+        "Monday": [
+            [
+                "12:00",
+                "13:00"
+            ]
+        ],
+        "Tuesday": [
+            [
+                "12:00",
+                "13:00"
+            ]
+        ],
+        "Wednesday": [
+            [
+                "12:00",
+                "13:00"
+            ]
+        ],
+        "Thursday": [
+            [
+                "12:00",
+                "13:00"
+            ]
+        ],
+        "Friday": [
+            [
+                "12:00",
+                "13:00"
+            ]
+        ],
+        "Saturday": [
+            [
+                "12:00",
+                "13:00"
+            ]
+        ],
+        "Sunday": []
+    },
+    "time_interval_per_appointment": "00:15:00",
+    "max_advance_days": 7,
+    "group": 7,
+    "organization": 1,
+    "created_by": 5
+}
+```
+
+Once this is done, you can use the below payload.
+
+URL: ```/api/appointments/schedule/``` (POST)
+```
+{
+    "user": 1,
+    "category": 7,
+    "organization": 1,
+    "scheduled_time": "2024-12-12T11:30"
+}
+```
+
+Sample Response:
+```
+
+{
+    "user": 1,
+    "category": 7,
+    "organization": 1,
+    "scheduled_time": "2024-12-12T11:15:00Z"
+}
+
 ```
 ------------------------------------------------------------------------------------------------
 

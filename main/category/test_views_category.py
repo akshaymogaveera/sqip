@@ -176,7 +176,7 @@ class TestCategoryByUserViewSet:
         )
         self.category2 = Category.objects.create(
             name="Surgery",
-            type="specialized",
+            type="online",
             status="inactive",
             organization=self.org1,
             group=self.group2,

@@ -1,6 +1,9 @@
 from django.db import models
 from main.models import Appointment, Organization, Category, User
 from django.db.models import Max, Min
+from django.utils import timezone
+from pytz import timezone as pytz_timezone
+from django.db.models import Q
 
 
 def check_organization_is_active(organization_id):
@@ -91,7 +94,7 @@ def get_user_appointments(user, is_scheduled=None, status="active"):
     """Retrieve active appointments for a user."""
     queryset = Appointment.objects.filter(user=user, status=status)
     if is_scheduled is True:
-        queryset = queryset.filter(is_scheduled=is_scheduled).order_by("estimated_time")
+        queryset = queryset.filter(is_scheduled=is_scheduled).order_by("scheduled_time")
     elif is_scheduled is False:
         queryset = queryset.filter(is_scheduled=is_scheduled).order_by("counter")
 
@@ -142,7 +145,7 @@ def get_scheduled_appointments_for_superuser(category_ids=None, status="active")
     if category_ids:
         queryset = queryset.filter(category__id__in=category_ids)
 
-    return queryset.order_by("estimated_time")
+    return queryset.order_by("scheduled_time")
 
 
 def get_scheduled_appointments_for_user(user, category_ids=None, status="active"):
@@ -163,7 +166,7 @@ def get_scheduled_appointments_for_user(user, category_ids=None, status="active"
     if category_ids:
         queryset = queryset.filter(category__id__in=category_ids)
 
-    return queryset.order_by("estimated_time")
+    return queryset.order_by("scheduled_time")
 
 
 def get_appointment_by_id(appointment_id, status="active", ignore_status=False):
@@ -275,3 +278,40 @@ def adjust_appointment_counter(appointment, increment, reference_counter, counte
 
     # Update the counter for filtered appointments
     Appointment.objects.filter(**query_filter).update(counter=counter_adjustment)
+
+
+def is_slot_available(category, scheduled_time):
+    """
+    Checks if the proposed appointment time overlaps with any active appointments.
+
+    Args:
+        category (Category): The category object containing the scheduling rules.
+        scheduled_time (datetime): The proposed scheduled time for the appointment.
+
+    Returns:
+        bool: True if the slot is available, False if the slot is taken.
+    """
+    # Get the appointment duration from the category
+    estimated_duration = category.time_interval_per_appointment
+    start_time = scheduled_time
+    end_time = start_time + estimated_duration  # Add estimated duration to start time to get end time
+
+    # Ensure that the scheduled time is timezone-aware
+    category_timezone = pytz_timezone(category.time_zone)
+    if timezone.is_naive(start_time):
+        start_time = category_timezone.localize(start_time)
+    if timezone.is_naive(end_time):
+        end_time = category_timezone.localize(end_time)
+        
+
+
+    overlapping_appointments = Appointment.objects.filter(
+        category=category,
+        status="active"
+    ).filter(
+        Q(scheduled_time__lt=end_time) &  # Existing start time is before proposed end time
+        Q(scheduled_end_time__gt=start_time)  # Existing end time is after proposed start time
+    )
+
+    return not overlapping_appointments.exists()
+

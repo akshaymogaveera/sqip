@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+from django.utils.timezone import now
 from main.exceptions import UnauthorizedAccessException
 from main.service import (
     check_category_is_active,
@@ -10,6 +12,8 @@ from main.service import (
 )
 from rest_framework import serializers, status
 from main.models import Appointment, Category, Organization
+from main.appointments.service import validate_scheduled_appointment
+from main.utils import convert_time_to_utc
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
@@ -222,3 +226,94 @@ class MoveAppointmentIDValidatorSerializer(BaseAppointmentIDValidatorSerializer)
                 )
 
         return attrs
+
+
+class ValidateScheduledAppointmentInput(serializers.Serializer):
+    organization = serializers.IntegerField(required=True)
+    category = serializers.IntegerField(required=True)
+    user = serializers.IntegerField(required=True)
+    scheduled_time = serializers.DateTimeField(required=True)
+
+    def validate_organization(self, value):
+        """Validate if the organization exists and is active using the service layer."""
+        organization = check_organization_is_active(value)
+        if not organization:
+            raise serializers.ValidationError(
+                "Organization does not exist or is not active."
+            )
+        return value
+
+    def validate_category(self, value):
+        """Validate if the category exists and is active using the service layer."""
+        category = check_category_is_active(value)
+
+        if not category:
+            raise serializers.ValidationError(
+                "Category does not exist or is not active."
+            )
+        
+        if not category.is_scheduled:
+            raise serializers.ValidationError(
+                "Category does not accept appointments."
+            )
+        return value
+
+    def validate_user(self, value):
+        """Validate if the user exists and is allowed to create the appointment."""
+        user = check_user_exists(value)
+        if not user:
+            raise serializers.ValidationError("User does not exist.")
+        return value
+    
+
+    def validate(self, attrs):
+        """Additional validations that depend on multiple fields."""
+        request_user = self.context["request"].user  # The user making the request
+        user_id = attrs.get("user")
+        category_id = attrs.get("category")
+        scheduled_time = attrs.get("scheduled_time")
+        category = check_category_is_active(category_id)
+        category_timezone = category.time_zone
+
+        # Convert scheduled_time to the category's time zone
+        local_scheduled_time = convert_time_to_utc(scheduled_time, category_timezone)
+
+        # Perform validation
+        if local_scheduled_time < now():
+            raise serializers.ValidationError("Scheduled time cannot be in the past.")
+        
+        # Perform validation: Check if scheduled_time is within the max advance days limit
+        max_allowed_date = now() + timedelta(days=category.max_advance_days)
+        if local_scheduled_time > max_allowed_date:
+            raise serializers.ValidationError(
+                f"Scheduled time cannot be more than {category.max_advance_days} days in advance."
+            )
+
+        authorized_category_ids = get_authorized_categories_for_user(
+            request_user
+        ).values_list("id", flat=True)
+        is_user_authorized_for_category = category_id in authorized_category_ids
+
+        if (
+            request_user.id != user_id
+            and not request_user.is_staff
+            and not request_user.is_superuser
+            and not is_user_authorized_for_category
+        ):
+            raise UnauthorizedAccessException(
+                detail="Unauthorized to access this appointment."
+            )
+        
+        validate_scheduled_appointment(category, scheduled_time)
+
+        attrs["scheduled_end_time"] = scheduled_time + category.time_interval_per_appointment
+
+        return attrs
+
+
+class CreateAppointmentSerializer(serializers.ModelSerializer):
+    scheduled_time = serializers.DateTimeField()
+
+    class Meta:
+        model = Appointment
+        fields = ["user", "category", "organization", "scheduled_time"]
