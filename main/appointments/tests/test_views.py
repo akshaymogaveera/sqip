@@ -71,12 +71,11 @@ class TestMakeAppointment:
 
     def test_make_appointment_success(self):
         """Test successfully creating an appointment."""
-        url = f'{reverse("appointments-list")}create/'  # Replace with your actual URL name
+        url = f'{reverse("appointments-list")}unschedule/'  # Replace with your actual URL name
         data = {
             "organization": self.organization.id,
             "category": self.category.id,
-            "user": self.user.id,
-            "is_scheduled": False,
+            "user": self.user.id
         }
 
         response = self.client.post(url, data, format="json")
@@ -85,12 +84,11 @@ class TestMakeAppointment:
 
     def test_make_appointment_user_not_found(self):
         """Test creating an appointment with a non-existing user."""
-        url = f'{reverse("appointments-list")}create/'
+        url = f'{reverse("appointments-list")}unschedule/'
         data = {
             "organization": self.organization.id,
             "category": self.category.id,
             "user": 99999,  # Non-existing user ID
-            "is_scheduled": False,
         }
 
         response = self.client.post(url, data, format="json")
@@ -113,12 +111,11 @@ class TestMakeAppointment:
         )
         inactive_organization.groups.add(Group.objects.create(name="Test Group1"))
 
-        url = f'{reverse("appointments-list")}create/'
+        url = f'{reverse("appointments-list")}unschedule/'
         data = {
             "organization": inactive_organization.id,
             "category": self.category.id,
-            "user": self.user.id,
-            "is_scheduled": False,
+            "user": self.user.id
         }
 
         response = self.client.post(url, data, format="json")
@@ -137,12 +134,11 @@ class TestMakeAppointment:
             created_by=self.user,
         )
 
-        url = f'{reverse("appointments-list")}create/'
+        url = f'{reverse("appointments-list")}unschedule/'
         data = {
             "organization": self.organization.id,
             "category": inactive_category.id,
-            "user": self.user.id,
-            "is_scheduled": False,
+            "user": self.user.id
         }
 
         response = self.client.post(url, data, format="json")
@@ -173,12 +169,11 @@ class TestMakeAppointment:
             created_by=self.user,
         )
 
-        url = f'{reverse("appointments-list")}create/'
+        url = f'{reverse("appointments-list")}unschedule/'
         data = {
             "organization": self.organization.id,
             "category": inactive_category.id,
-            "user": self.user.id,
-            "is_scheduled": False,
+            "user": self.user.id
         }
 
         response = self.client.post(url, data, format="json")
@@ -190,12 +185,11 @@ class TestMakeAppointment:
 
     def test_make_appointment_duplicate(self):
         """Test creating a duplicate appointment."""
-        url = f'{reverse("appointments-list")}create/'
+        url = f'{reverse("appointments-list")}unschedule/'
         data = {
             "organization": self.organization.id,
             "category": self.category.id,
-            "user": self.user.id,
-            "is_scheduled": False,
+            "user": self.user.id
         }
 
         # Create the first appointment
@@ -211,14 +205,13 @@ class TestMakeAppointment:
 
     def test_make_appointment_counter_increment(self):
         """Test that the counter is incremented correctly for new appointments."""
-        url = f'{reverse("appointments-list")}create/'
+        url = f'{reverse("appointments-list")}unschedule/'
 
         # Create the first appointment
         data = {
             "organization": self.organization.id,
             "category": self.category.id,
-            "user": self.user.id,
-            "is_scheduled": False,
+            "user": self.user.id
         }
         response1 = self.client.post(url, data, format="json")
         apppointment = Appointment.objects.get(id=response1.json().get("id"))
@@ -273,7 +266,7 @@ class TestMakeAppointment:
 
     def test_make_appointment_no_access(self):
         """Test make appointment if no access."""
-        url = f'{reverse("appointments-list")}create/'
+        url = f'{reverse("appointments-list")}unschedule/'
 
         self.user_new = User.objects.create_user(
             username="testuser4", password="testpassword"
@@ -288,8 +281,7 @@ class TestMakeAppointment:
         data = {
             "organization": self.organization.id,
             "category": self.category.id,
-            "user": self.user.id,
-            "is_scheduled": False,
+            "user": self.user.id
         }
 
         # Create a second appointment
@@ -297,9 +289,33 @@ class TestMakeAppointment:
         assert response.status_code == status.HTTP_403_FORBIDDEN
         assert response.json() == {"detail": "Unauthorized to access this appointment."}
 
+    def test_make_appointment_if_regular_user(self):
+        """Test make appointment if no access."""
+        url = f'{reverse("appointments-list")}unschedule/'
+
+        self.user_new = User.objects.create_user(
+            username="testuser4", password="testpassword"
+        )
+        token_response = self.client.post(
+            reverse("token_obtain_pair"),
+            {"username": "testuser4", "password": "testpassword"},
+        )
+        self.token = token_response.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
+
+        data = {
+            "organization": self.organization.id,
+            "category": self.category.id,
+            "user": self.user_new.id
+        }
+
+        # Create a second appointment
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == 201
+
     def test_make_appointment_with_admin_acess(self):
         """Test make appointment with admin access."""
-        url = f'{reverse("appointments-list")}create/'
+        url = f'{reverse("appointments-list")}unschedule/'
 
         self.user_new = User.objects.create_user(
             username="testuser4", password="testpassword", is_staff=True
@@ -314,8 +330,7 @@ class TestMakeAppointment:
         data = {
             "organization": self.organization.id,
             "category": self.category.id,
-            "user": self.user.id,
-            "is_scheduled": False,
+            "user": self.user.id
         }
 
         # Create a second appointment
@@ -324,7 +339,7 @@ class TestMakeAppointment:
 
     def test_make_appointment_with_group_admin_acess(self):
         """Test make appointment with group admin access."""
-        url = f'{reverse("appointments-list")}create/'
+        url = f'{reverse("appointments-list")}unschedule/'
 
         # Create group admin user
         group = Group.objects.create(name="Test Group Admin")
@@ -356,8 +371,7 @@ class TestMakeAppointment:
         data = {
             "organization": self.organization.id,
             "category": category_group.id,
-            "user": test_new_user.id,
-            "is_scheduled": False,
+            "user": test_new_user.id
         }
 
         # Create a second appointment
@@ -872,185 +886,6 @@ class TestActivateAppointment:
         assert "Scheduling Error" in response.data["errors"]
 
 
-@pytest.mark.django_db
-class TestScheduleAppointment:
-    def setup_method(self):
-        # Initialize test client
-        self.client = APIClient()
-
-        # Create a test user
-        self.user = User.objects.create_user(username="testuser", password="testpassword")
-
-        # Assign the user to a group
-        self.group = Group.objects.create(name="Test Group for User")
-        self.user.groups.add(self.group)
-
-        # Authenticate user
-        token_response = self.client.post(
-            reverse("token_obtain_pair"),
-            {"username": "testuser", "password": "testpassword"}
-        )
-        self.token = token_response.data["access"]
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
-
-        # Create an active organization
-        self.organization = Organization.objects.create(
-            name="Test Organization",
-            created_by=self.user,
-            city="Test City",
-            state="Test State",
-            country="Test Country",
-            type="clinic",
-            status="active",
-        )
-        self.organization.groups.add(self.group)
-
-        # Create an active category with scheduling enabled and working hours
-        self.category = Category.objects.create(
-            organization=self.organization,
-            status="active",
-            type="general",
-            created_by=self.user,
-            time_interval_per_appointment=timedelta(minutes=30),
-            max_advance_days=7,
-            time_zone="US/Eastern",
-            is_scheduled=True,
-            opening_hours={
-                "Monday": [["09:00", "17:00"]],
-                "Tuesday": [["09:00", "17:00"]],
-                "Wednesday": [["09:00", "17:00"]],
-                "Thursday": [["09:00", "17:00"]],
-                "Friday": [["09:00", "17:00"]],
-                "Saturday": [],
-                "Sunday": []
-            },
-            break_hours={
-                "Monday": [["12:00", "13:00"]],
-                "Tuesday": [["12:00", "13:00"]],
-                "Wednesday": [["12:00", "13:00"]],
-                "Thursday": [["12:00", "13:00"]],
-                "Friday": [["12:00", "13:00"]],
-            },
-        )
-
-        today = datetime.now(timezone("US/Eastern"))
-        days_until_monday = (7 - today.weekday()) % 7  # Monday is 0
-        self.test_date = (today + timedelta(days=days_until_monday)).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
-
-    def test_schedule_outside_working_hours(self):
-        """Test scheduling an appointment outside working hours."""
-        url = reverse("appointments-schedule")
-        scheduled_time = self.test_date.replace(hour=18, minute=0, second=0)  # After hours
-        data = {
-            "organization": self.organization.id,
-            "category": self.category.id,
-            "user": self.user.id,
-            "scheduled_time": scheduled_time.isoformat(),
-        }
-
-        response = self.client.post(url, data, format="json")
-
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert response.json() == {'non_field_errors': ['Scheduled time is not within allowed hours.']}
-
-    def test_schedule_during_break_hours(self):
-        """Test scheduling an appointment during break hours."""
-        url = reverse("appointments-schedule")
-        scheduled_time = self.test_date.replace(hour=12, minute=30, second=0)  # During break
-        data = {
-            "organization": self.organization.id,
-            "category": self.category.id,
-            "user": self.user.id,
-            "scheduled_time": scheduled_time.isoformat(),
-        }
-
-        response = self.client.post(url, data, format="json")
-
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert response.json() == {'non_field_errors': ['Scheduled time is not within allowed hours.']}
-
-    def test_schedule_with_incorrect_interval_for_30_min_appointments(self):
-        """Test scheduling an appointment that overlaps with an existing one."""
-        # Create an 15min instead of 30 min appointment
-        existing_time = self.test_date.replace(hour=10, minute=0, second=0)
-        Appointment.objects.create(
-            organization=self.organization,
-            category=self.category,
-            user=self.user,
-            scheduled_time=existing_time,
-            scheduled_end_time=existing_time + timedelta(minutes=30),
-            status="active",
-            created_by=self.user,
-            updated_by=self.user,
-        )
-
-        # Attempt to schedule an 15min time appointment
-        url = reverse("appointments-schedule")
-        overlapping_time = existing_time.replace(minute=15)
-        data = {
-            "organization": self.organization.id,
-            "category": self.category.id,
-            "user": self.user.id,
-            "scheduled_time": overlapping_time.isoformat(),
-        }
-
-        response = self.client.post(url, data, format="json")
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert response.json() == {
-            "non_field_errors": [
-                "Scheduled time must match one of the available start times: 09:00, 09:30, 10:00, 10:30, 11:00, 11:30, 13:00, 13:30, 14:00, 14:30, 15:00, 15:30, 16:00, 16:30."
-            ]
-        }
-
-    def test_schedule_with_overlapping_appointments(self):
-        """Test scheduling an appointment that overlaps with an existing one."""
-        # Create an overlapping appointment
-        existing_time = self.test_date.replace(hour=10, minute=0, second=0)
-        Appointment.objects.create(
-            organization=self.organization,
-            category=self.category,
-            user=self.user,
-            scheduled_time=existing_time,
-            scheduled_end_time=existing_time + timedelta(minutes=30),
-            status="active",
-            created_by=self.user,
-            updated_by=self.user,
-        )
-
-        # Attempt to schedule an overlapping appointment
-        url = reverse("appointments-schedule")
-        overlapping_time = existing_time
-        data = {
-            "organization": self.organization.id,
-            "category": self.category.id,
-            "user": self.user.id,
-            "scheduled_time": overlapping_time.isoformat(),
-        }
-
-        response = self.client.post(url, data, format="json")
-
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert response.json() == {'non_field_errors': ['The selected time slot is already taken.']}
-
-    def test_schedule_with_valid_constraints(self):
-        """Test scheduling an appointment that adheres to all constraints."""
-        url = reverse("appointments-schedule")
-        valid_time = self.test_date.replace(hour=10, minute=0, second=0)  # Valid working hour
-        data = {
-            "organization": self.organization.id,
-            "category": self.category.id,
-            "user": self.user.id,
-            "scheduled_time": valid_time.isoformat(),
-        }
-
-        response = self.client.post(url, data, format="json")
-
-        assert response.status_code == status.HTTP_201_CREATED
-        assert response.data["organization"] == self.organization.id
-        assert response.data["category"] == self.category.id
-        assert response.data["user"] == self.user.id
 
 
 @pytest.mark.django_db
@@ -1128,7 +963,6 @@ class TestScheduleAppointments:
         """Test scheduling an appointment outside working hours."""
         url = reverse("appointments-schedule")
         scheduled_time = self.test_date.replace(hour=17, minute=30, second=0)  # After hours
-        print(scheduled_time, "--- test")
         data = {
             "organization": self.organization.id,
             "category": self.category.id,
@@ -1207,6 +1041,12 @@ class TestScheduleAppointments:
         assert response.data["organization"] == self.organization.id
         assert response.data["category"] == self.category.id
         assert response.data["user"] == self.user.id
+        assert response.data["scheduled_end_time"] == self.test_date.replace(hour=9, minute=45, second=0).isoformat()
+
+        # Try duplicate
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json() == {'non_field_errors': ['The selected time slot is already taken.']}
 
     def test_schedule_valid_case_start_of_opening_hours(self):
         """Test scheduling at the exact start of opening hours."""
@@ -1316,3 +1156,216 @@ class TestScheduleAppointments:
         assert response.data["organization"] == self.organization.id
         assert response.data["category"] == self.category.id
         assert response.data["user"] == self.user.id
+
+    def test_make_appointment_no_access(self):
+        """Test make appointment if no access."""
+
+        self.user_new = User.objects.create_user(
+            username="testuser4", password="testpassword"
+        )
+        token_response = self.client.post(
+            reverse("token_obtain_pair"),
+            {"username": "testuser4", "password": "testpassword"},
+        )
+        self.token = token_response.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
+
+        url = reverse("appointments-schedule")
+        valid_time = self.test_date.replace(hour=10, minute=45, second=0)  # Mid-morning slot
+        data = {
+            "organization": self.organization.id,
+            "category": self.category.id,
+            "user": self.user.id,
+            "scheduled_time": valid_time.isoformat(),
+        }
+
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.json() == {"detail": "Unauthorized to access this appointment."}
+
+
+    def test_make_appointment_category_with_wrong_org(self):
+        """Test creating an appointment with wrong org."""
+
+        dummy_organization = Organization.objects.create(
+            name="Test Organization1",
+            created_by=self.user,
+            portfolio_site="",
+            display_picture=None,
+            city="Test City",
+            state="Test State",
+            country="Test Country",
+            type="restaurant",
+            status="active",
+        )
+
+        url = reverse("appointments-schedule")
+        valid_time = self.test_date.replace(hour=10, minute=45, second=0)  # Mid-morning slot
+        data = {
+            "organization": dummy_organization.id,
+            "category": self.category.id,
+            "user": self.user.id,
+            "scheduled_time": valid_time.isoformat(),
+        }
+
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json() == {'non_field_errors': ['Category does not exist or is not accepting appointments.']}
+
+
+    def test_make_appointment_with_admin_acess(self):
+        """Test make appointment with admin access."""
+
+        self.user_new = User.objects.create_user(
+            username="testuser4", password="testpassword", is_staff=True
+        )
+        token_response = self.client.post(
+            reverse("token_obtain_pair"),
+            {"username": "testuser4", "password": "testpassword"},
+        )
+        self.token = token_response.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
+
+        url = reverse("appointments-schedule")
+        valid_time = self.test_date.replace(hour=10, minute=45, second=0)  # Mid-morning slot
+        data = {
+            "organization": self.organization.id,
+            "category": self.category.id,
+            "user": self.user.id,
+            "scheduled_time": valid_time.isoformat(),
+        }
+
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == 201
+
+    def test_make_appointment_with_group_admin_acess(self):
+        """Test make appointment with group admin access."""
+
+        # Create group admin user
+        group = Group.objects.create(name="Test Group Admin")
+        user_group_admin = User.objects.create_user(
+            username="testuser5", password="testpassword"
+        )
+        user_group_admin.groups.add(group)
+
+        category_group = Category.objects.create(
+            organization=self.organization,
+            status="active",
+            type="online",
+            created_by=self.user,
+            time_interval_per_appointment=timedelta(minutes=30),
+            max_advance_days=7,
+            time_zone="US/Eastern",
+            is_scheduled=True,
+            group=group,
+            opening_hours={
+                "Monday": [["09:15", "16:45"]],
+                "Tuesday": [["09:00", "17:00"]],
+                "Wednesday": [["09:45", "16:30"]],
+                "Thursday": [["09:30", "17:15"]],
+                "Friday": [["09:15", "15:45"]],
+                "Saturday": [],
+                "Sunday": []
+            },
+            break_hours={
+                "Monday": [["12:15", "13:30"]],
+                "Tuesday": [["12:30", "14:00"]],
+                "Wednesday": [["13:15", "14:30"]],
+                "Thursday": [["12:00", "13:00"]],
+                "Friday": [["11:45", "12:30"]],
+            },
+        )
+
+        # Create regular user
+        test_new_user = User.objects.create_user(
+            username="testuser6", password="testpassword"
+        )
+
+        token_response = self.client.post(
+            reverse("token_obtain_pair"),
+            {"username": "testuser5", "password": "testpassword"},
+        )
+        token = token_response.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        url = reverse("appointments-schedule")
+        valid_time = self.test_date.replace(hour=10, minute=45, second=0)  # Mid-morning slot
+        data = {
+            "organization": self.organization.id,
+            "category": category_group.id,
+            "user": test_new_user.id,
+            "scheduled_time": valid_time.isoformat(),
+        }
+
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == 201
+
+    def test_schedule_valid_case_regular_user(self):
+        """Testif regular user."""
+        self.user_new = User.objects.create_user(
+            username="testuser4", password="testpassword"
+        )
+        token_response = self.client.post(
+            reverse("token_obtain_pair"),
+            {"username": "testuser4", "password": "testpassword"},
+        )
+        self.token = token_response.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
+
+        url = reverse("appointments-schedule")
+        valid_time = self.test_date.replace(hour=10, minute=45, second=0)  # Mid-morning slot
+        data = {
+            "organization": self.organization.id,
+            "category": self.category.id,
+            "user": self.user_new.id,
+            "scheduled_time": valid_time.isoformat(),
+        }
+        response = self.client.post(url, data, format="json")
+
+        assert response.status_code == status.HTTP_201_CREATED
+
+    def test_schedule_with_overlapping_appointments(self):
+        """Test scheduling an appointment that overlaps with an existing one."""
+        # Create an overlapping appointment
+        existing_time = self.test_date.replace(hour=10, minute=15, second=0)
+        Appointment.objects.create(
+            organization=self.organization,
+            category=self.category,
+            user=self.user,
+            scheduled_time=existing_time,
+            scheduled_end_time=existing_time + timedelta(minutes=30),
+            status="active",
+            created_by=self.user,
+            updated_by=self.user,
+        )
+
+        # Attempt to schedule an overlapping appointment
+        url = reverse("appointments-schedule")
+        overlapping_time = existing_time
+        data = {
+            "organization": self.organization.id,
+            "category": self.category.id,
+            "user": self.user.id,
+            "scheduled_time": overlapping_time.isoformat(),
+        }
+
+        response = self.client.post(url, data, format="json")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json() == {'non_field_errors': ['The selected time slot is already taken.']}
+
+    def test_schedule_more_than_7_days(self):
+        """Test scheduling on more than 7 days."""
+        test_date = self.test_date + timedelta(days=7)
+        url = reverse("appointments-schedule")
+        valid_time = test_date.replace(hour=14, minute=0, second=0)  # Valid Tuesday slot
+        data = {
+            "organization": self.organization.id,
+            "category": self.category.id,
+            "user": self.user.id,
+            "scheduled_time": valid_time.isoformat(),
+        }
+
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json() == {'non_field_errors': ['Scheduled time cannot be more than 7 days in advance.']}

@@ -223,9 +223,9 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         serializer = AppointmentSerializer(unscheduled_appointments, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=["post"], url_path="create")
+    @action(detail=False, methods=["post"], url_path="unschedule")
     @view_set_error_handler
-    def make_appointment(self, request):
+    def unschedule(self, request):
         """Make appointment
         a user or Admin(behalf of any user) can make an appointment.
 
@@ -234,8 +234,7 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         {
             "organization": 1,
             "category": 1,
-            "user":2,
-            "is_scheduled": false
+            "user":2
         }
 
         Args:
@@ -261,31 +260,29 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
             request.data
         )
 
-        # Check if appointment is scheduled
-        if not input_serializer.validated_data.get("is_scheduled"):
-            counter, error_message = handle_appointment_scheduling(
-                input_serializer.validated_data
+        counter, error_message = handle_appointment_scheduling(
+            input_serializer.validated_data
+        )
+
+        if error_message:
+            logger.error(
+                "Error scheduling appointment: %s",
+                error_message
+            )
+            return Response(
+                {"errors": {"appointment": [error_message]}},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-            if error_message:
-                logger.error(
-                    "Error scheduling appointment: %s",
-                    error_message
-                )
-                return Response(
-                    {"errors": {"appointment": [error_message]}},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        # Set counter for new appointment
+        serializer.validated_data["counter"] = counter
+        serializer.validated_data["created_by"] = self.request.user
+        logger.info(
+            "Appointment created with counter %d.",
+            counter
+        )
 
-            # Set counter for new appointment
-            serializer.validated_data["counter"] = counter
-            serializer.validated_data["created_by"] = self.request.user
-            logger.info(
-                "Appointment created with counter %d.",
-                counter
-            )
-
-        serializer.save()
+        serializer.save(is_scheduled=False)
         logger.info(
             "Appointment successfully created for user %d.",
             self.request.user.id

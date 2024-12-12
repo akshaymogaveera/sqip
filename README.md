@@ -238,13 +238,12 @@ Sample Response:
 
 > Create Unscheduled Appointment
 
-URL: ```/api/appointments/create/``` (POST)
+URL: ```/api/appointments/unschedule/``` (POST)
 ```
 {
     "organization": 1,  # Name of Entity
     "category": 1, # Restaurant etc.
-    "user":2,
-    "is_scheduled": false # for unscheduled appointments, scheduled yet to be implemented.
+    "user":2
 }
 ```
 
@@ -377,10 +376,10 @@ Once this is done, you can use the below payload.
 URL: ```/api/appointments/schedule/``` (POST)
 ```
 {
-    "user": 1,
+    "user": 2,
     "category": 7,
     "organization": 1,
-    "scheduled_time": "2024-12-12T11:30"
+    "scheduled_time": "2024-12-12T16:15"
 }
 ```
 
@@ -388,10 +387,11 @@ Sample Response:
 ```
 
 {
-    "user": 1,
+    "user": 2,
     "category": 7,
     "organization": 1,
-    "scheduled_time": "2024-12-12T11:15:00Z"
+    "scheduled_time": "2024-12-12T16:15:00",
+    "scheduled_end_time": "2024-12-12T16:30:00"
 }
 
 ```

@@ -32,7 +32,6 @@ class ValidateAppointmentInput(serializers.Serializer):
     organization = serializers.IntegerField(required=True)
     category = serializers.IntegerField(required=True)
     user = serializers.IntegerField(required=True)
-    is_scheduled = serializers.BooleanField(required=True)
 
     def validate_organization(self, value):
         """Validate if the organization exists and is active using the service layer."""
@@ -271,8 +270,14 @@ class ValidateScheduledAppointmentInput(serializers.Serializer):
         request_user = self.context["request"].user  # The user making the request
         user_id = attrs.get("user")
         category_id = attrs.get("category")
+        organization_id = attrs.get("organization")
         scheduled_time = attrs.get("scheduled_time")
-        category = check_category_is_active(category_id)
+        organization = check_organization_is_active(organization_id)
+        category = check_category_is_active(category_id, organization)
+
+        if not category:
+           raise serializers.ValidationError("Category does not exist or is not accepting appointments.")
+        
         category_timezone = category.time_zone
 
         # Convert scheduled_time to the category's time zone
@@ -312,8 +317,10 @@ class ValidateScheduledAppointmentInput(serializers.Serializer):
 
 
 class CreateAppointmentSerializer(serializers.ModelSerializer):
-    scheduled_time = serializers.DateTimeField()
+    # Define the format to exclude timezone information
+    scheduled_time = serializers.DateTimeField(format='%Y-%m-%dT%H:%M:%S')
+    scheduled_end_time = serializers.DateTimeField(format='%Y-%m-%dT%H:%M:%S', required=False)
 
     class Meta:
         model = Appointment
-        fields = ["user", "category", "organization", "scheduled_time"]
+        fields = ["user", "category", "organization", "scheduled_time", "scheduled_end_time"]
