@@ -1,4 +1,5 @@
 from main.appointments.service import (
+    get_available_slots_for_category,
     handle_appointment_scheduling,
     move_appointment,
     activate_appointment,
@@ -26,6 +27,7 @@ from main.appointments.serializers import (
     CreateAppointmentSerializer,
     MakeAppointmentSerializer,
     MoveAppointmentIDValidatorSerializer,
+    SlotQueryParamsSerializer,
     ValidateAppointmentInput,
     AppointmentListQueryParamsSerializer,
     ValidateScheduledAppointmentInput,
@@ -507,3 +509,31 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
             self.request.user.id
         )
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+
+    @action(detail=False, methods=["get"], url_path="availability")
+    def get_availability(self, request, *args, **kwargs):
+        """
+        Custom endpoint to generate time slots and return availability status.
+        Query parameters:
+        - date: Required, format 'YYYY-MM-DD'.
+        - category_id: Required, ID of the category.
+
+        Eg: /api/appointments/availability/?date=2024-12-12&category_id=7
+        """
+
+        query_params_serializer = SlotQueryParamsSerializer(data=request.query_params)
+        query_params_serializer.is_valid(raise_exception=True)
+
+        # Extract validated data
+        query_date = query_params_serializer.validated_data["date"]
+        category_id = query_params_serializer.validated_data["category_id"]
+        # Call the service function to get available slots
+        available_slots = get_available_slots_for_category(category_id, query_date)
+
+        logger.info(
+            "List availability list for user %d, date: %s",
+            self.request.user.id, str(query_date)
+        )
+
+        return Response(available_slots)

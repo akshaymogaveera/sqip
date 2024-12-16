@@ -3,6 +3,7 @@ import pytest
 import pytz
 from main.models import Appointment, Category, Organization
 from main.appointments.service import (
+    get_available_slots_for_category,
     handle_appointment_scheduling,
     is_within_opening_hours,
     move_appointment,
@@ -1065,5 +1066,235 @@ class TestValidateScheduledAppointment:
         self.category.opening_hours["Thursday"] = [["04:00", "12:00"]]  # Eastern time (UTC -5)
 
         with mocker.patch("main.appointments.service.is_slot_available", return_value=True):
-            validate_scheduled_appointment(self.category, scheduled_time)
-            
+            validate_scheduled_appointment(self.category, scheduled_time)          
+
+@pytest.mark.django_db
+class TestGetAvailableSlots:
+    """Test suite for the `get_available_slots_for_category` function."""
+
+    def setup_method(self):
+        """Set up common test data for categories, users, and appointments."""
+        self.created_by = User.objects.create_user(username="testuser", password="password")
+        self.organization = Organization.objects.create(name="Test Organization", created_by=self.created_by)
+        
+        # Create Category with opening and break hours
+        self.category = Category.objects.create(
+            name="Test Category",
+            organization=self.organization,
+            created_by=self.created_by,
+            is_scheduled=True,
+            time_interval_per_appointment=timedelta(minutes=15),
+            time_zone="America/New_York",
+            status="active",
+            opening_hours={
+                "Monday": [["09:00", "17:00"]],
+                "Tuesday": [["09:00", "17:00"]],
+                "Wednesday": [["09:00", "17:00"]],
+                "Thursday": [["09:00", "17:00"]],
+                "Friday": [["09:00", "17:00"]],
+                "Saturday": [],
+                "Sunday": [["10:00", "14:00"]],
+            },
+            break_hours={
+                "Monday": [["12:00", "13:00"]],
+                "Thursday": [["12:00", "13:00"]],
+            }
+        )
+        self.category.save()
+
+    def test_valid_slots_for_day(self):
+        """Test available slots for a valid day with open hours."""
+        query_date = datetime(2024, 11, 25).date()  # Monday
+        result = get_available_slots_for_category(self.category.id, query_date)
+
+        # Ensure response structure
+        assert "slots" in result
+        assert "available_count" in result
+        assert isinstance(result["slots"], list)
+        assert isinstance(result["available_count"], int)
+
+        # Check that there are available slots
+        assert result["available_count"] > 0
+
+    def test_slots_with_appointments_taken(self):
+        """Test available slots on a day with some appointments already scheduled."""
+        query_date = datetime(2024, 11, 25).date()  # Monday
+
+        # Create a scheduled appointment for Monday at 09:15
+        Appointment.objects.create(
+            category=self.category,
+            scheduled_time=datetime(2024, 11, 25, 9, 15),
+            status="active",
+            user=self.created_by,
+            organization=self.organization
+        )
+
+        result = get_available_slots_for_category(self.category.id, query_date)
+
+        # Ensure the slot at 09:15 is marked as taken
+        slot_times = [slot[0][0] for slot in result["slots"]]
+        assert "09:15" in slot_times  # Slot 09:15 should be present
+        assert result["slots"][slot_times.index("09:15")][1] is True  # Slot 09:15 should be taken
+
+        # Check available count after taking one slot
+        assert result["available_count"] < len(result["slots"])
+
+    def test_no_opening_hours_for_weekday(self):
+        """Test when the category has no opening hours for the requested weekday."""
+        query_date = datetime(2024, 11, 30).date()  # Saturday, no opening hours
+
+        with pytest.raises(ValidationError):
+            get_available_slots_for_category(self.category.id, query_date)
+
+    def test_invalid_category_id(self):
+        """Test when an invalid category ID is provided."""
+        query_date = datetime(2024, 11, 25).date()  # Monday
+        invalid_category_id = 99999  # Assuming this ID does not exist
+
+        with pytest.raises(ValidationError):
+            get_available_slots_for_category(invalid_category_id, query_date)
+
+    def test_no_break_hours(self):
+        """Test when there are no break hours for a given day."""
+        query_date = datetime(2024, 11, 25).date()  # Monday
+
+        # Set up a category with no break hours for Monday
+        self.category.break_hours = {}
+        self.category.save()
+
+        result = get_available_slots_for_category(self.category.id, query_date)
+
+        # Ensure that the slots are calculated correctly without break hours
+        assert result["available_count"] > 0  # Should still have available slots
+        assert len(result["slots"]) > 0  # Ensure there are slots returned
+
+    def test_no_slot_taken_for_invalid_times(self):
+        """Test that slots outside the defined interval are not mistakenly marked as taken."""
+        query_date = datetime(2024, 11, 25).date()  # Monday
+
+        # Create an appointment at a valid time (e.g., 09:15)
+        Appointment.objects.create(
+            category=self.category,
+            scheduled_time=datetime(2024, 11, 25, 9, 15),
+            status="active",
+            user=self.created_by,
+            organization=self.organization
+        )
+
+        result = get_available_slots_for_category(self.category.id, query_date)
+
+        # Check if a slot outside the valid 15-minute interval (e.g., 09:17) is not mistakenly taken
+        slot_times = [slot[0][0] for slot in result["slots"]]
+        assert "09:17" not in slot_times  # There should be no slot at 09:17
+        assert "09:15" in slot_times  # Slot 09:15 should be present and taken
+
+    def test_edge_case_break_hours(self):
+        """Test slots right before and after break hours to ensure correctness."""
+        query_date = datetime(2024, 11, 25).date()  # Monday (break from 12:00 to 13:00)
+
+        # Create an appointment for 13:00 (after break)
+        Appointment.objects.create(
+            category=self.category,
+            scheduled_time=datetime(2024, 11, 25, 13, 00),
+            status="active",
+            user=self.created_by,
+            organization=self.organization
+        )
+
+        # Ensure break hours logic works properly
+        result = get_available_slots_for_category(self.category.id, query_date)
+
+        # Ensure 12:00-12:15 is marked as taken and 12:15-12:30 is available
+        slot_times = [slot[0][0] for slot in result["slots"]]
+        assert "13:00" in slot_times
+        assert result["slots"][slot_times.index("13:00")][1] is True  # Slot 13:00 should be taken (after break)
+        assert "13:15" in slot_times
+        assert result["slots"][slot_times.index("13:15")][1] is False  # Slot 13:15 should be available (after break)
+
+    def test_edge_case_appointment_at_start_of_day(self):
+        """Test appointment at the exact start time of the day (09:00)"""
+        query_date = datetime(2024, 11, 25).date()  # Monday
+
+        # Create an appointment at the exact start of the opening time (09:00)
+        Appointment.objects.create(
+            category=self.category,
+            scheduled_time=datetime(2024, 11, 25, 9, 00),
+            status="active",
+            user=self.created_by,
+            organization=self.organization
+        )
+
+        result = get_available_slots_for_category(self.category.id, query_date)
+
+        # Ensure that the slot at 09:00 is marked as taken
+        slot_times = [slot[0][0] for slot in result["slots"]]
+        assert "09:00" in slot_times
+        assert result["slots"][slot_times.index("09:00")][1] is True  # Slot 09:00 should be taken
+
+    def test_edge_case_appointment_at_end_of_day(self):
+        """Test appointment at the exact end time of the day (16:45)"""
+        query_date = datetime(2024, 11, 25).date()  # Monday
+
+        # Create an appointment at the exact end of the opening time (16:45)
+        Appointment.objects.create(
+            category=self.category,
+            scheduled_time=datetime(2024, 11, 25, 16, 45),
+            status="active",
+            user=self.created_by,
+            organization=self.organization
+        )
+
+        result = get_available_slots_for_category(self.category.id, query_date)
+
+        # Ensure that the slot at 16:45 is marked as taken
+        slot_times = [slot[0][0] for slot in result["slots"]]
+        assert "16:45" in slot_times
+        assert result["slots"][slot_times.index("16:45")][1] is True  # Slot 16:45 should be taken
+
+    def test_no_slots_with_appointments_at_all_times(self):
+        """Test that when appointments exist for all slots, no slots are available."""
+        query_date = datetime(2024, 11, 25).date()  # Monday
+
+        # Create appointments for all available slots
+        for hour in range(9, 17):
+            for minute in range(0, 60, 15):
+                Appointment.objects.create(
+                    category=self.category,
+                    scheduled_time=datetime(2024, 11, 25, hour, minute),
+                    status="active",
+                    user=self.created_by,
+                    organization=self.organization
+                )
+
+        result = get_available_slots_for_category(self.category.id, query_date)
+
+        # Ensure no available slots
+        assert result["available_count"] == 0
+        assert all(slot[1] is True for slot in result["slots"])  # All slots should be taken
+
+    def test_multiple_appointments_in_same_slot(self):
+        """Test handling of multiple appointments in the same slot (edge case)."""
+        query_date = datetime(2024, 11, 25).date()  # Monday
+
+        # Create two appointments for the same slot (09:15)
+        Appointment.objects.create(
+            category=self.category,
+            scheduled_time=datetime(2024, 11, 25, 9, 15),
+            status="active",
+            user=self.created_by,
+            organization=self.organization
+        )
+        Appointment.objects.create(
+            category=self.category,
+            scheduled_time=datetime(2024, 11, 25, 9, 15),
+            status="active",
+            user=self.created_by,
+            organization=self.organization
+        )
+
+        result = get_available_slots_for_category(self.category.id, query_date)
+
+        # Ensure the slot at 09:15 is marked as taken (only once)
+        slot_times = [slot[0][0] for slot in result["slots"]]
+        assert "09:15" in slot_times
+        assert result["slots"][slot_times.index("09:15")][1] is True  # Slot 09:15 should be taken

@@ -1,3 +1,4 @@
+from unittest.mock import patch
 import pytest
 from django.urls import reverse
 from rest_framework import status
@@ -1369,3 +1370,137 @@ class TestScheduleAppointments:
         response = self.client.post(url, data, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.json() == {'non_field_errors': ['Scheduled time cannot be more than 7 days in advance.']}
+
+
+@pytest.mark.django_db
+class TestGetAvailability:
+    """Test suite for the `get_availability` custom action."""
+
+    def setup_method(self):
+        """Set up common test data for category and user."""
+        self.client = APIClient()
+
+        # Create a test user and organization
+        self.created_by = User.objects.create_user(username="testuser", password="password")
+        self.organization = Organization.objects.create(name="Test Organization", created_by=self.created_by)
+
+        # Authenticate user
+        token_response = self.client.post(
+            reverse("token_obtain_pair"),
+            {"username": "testuser", "password": "password"}
+        )
+        self.token = token_response.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
+
+        # Create a category that accepts appointments
+        self.category = Category.objects.create(
+            name="Test Category",
+            organization=self.organization,
+            created_by=self.created_by,
+            is_scheduled=True,
+            time_interval_per_appointment=timedelta(minutes=15),
+            time_zone="America/New_York",
+            status="active",
+            opening_hours={
+                "Monday": [["09:00", "17:00"]],
+                "Tuesday": [["09:00", "17:00"]],
+                "Wednesday": [["09:00", "17:00"]],
+                "Thursday": [["09:00", "17:00"]],
+                "Friday": [],
+                "Saturday": [],
+                "Sunday": [["10:00", "14:00"]],
+            },
+            break_hours={},
+        )
+        self.category.save()
+
+    def test_get_availability_valid(self):
+        """Test valid request to get availability."""
+        url = f"/api/appointments/availability/?date=2024-12-12&category_id={self.category.id}"
+
+        # Mock the service function
+        mock_available_slots = {
+            "date": "2024-12-12",
+            "slots": [
+                [["09:00", "09:15"], False],
+                [["09:15", "09:30"], True],
+            ],
+            "available_count": 1,
+        }
+
+        with patch("main.appointments.views.get_available_slots_for_category", return_value=mock_available_slots):
+            response = self.client.get(url)
+        
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == mock_available_slots
+
+    def test_get_availability_invalid_date_format(self):
+        """Test invalid date format in query parameters."""
+        url = f"/api/appointments/availability/?date=2024-12-32&category_id={self.category.id}"
+
+        response = self.client.get(url)
+        
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "date" in response.data
+        assert response.data["date"] == ["Invalid date format. Use 'YYYY-MM-DD'."]
+
+    def test_get_availability_missing_category_id(self):
+        """Test missing category_id in query parameters."""
+        url = "/api/appointments/availability/?date=2024-12-12"
+
+        response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "category_id" in response.data
+        assert response.data["category_id"] == ["This field is required."]
+
+    def test_get_availability_category_not_found(self):
+        """Test invalid category_id in query parameters."""
+        url = "/api/appointments/availability/?date=2024-12-12&category_id=99999"  # Invalid category ID
+
+        response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "category_id" in response.data
+        assert response.data["category_id"] == ["Category does not exist or is not active."]
+
+    def test_get_availability_category_not_accepting_appointments(self):
+        """Test category that does not accept appointments."""
+        # Create a category that does not accept appointments
+        inactive_category = Category.objects.create(
+            name="Inactive Category",
+            organization=self.organization,
+            created_by=self.created_by,
+            is_scheduled=False,  # This category does not accept appointments
+            time_interval_per_appointment=timedelta(minutes=15),
+            time_zone="America/New_York",
+            status="active",
+            opening_hours={
+                "Monday": [["09:00", "17:00"]],
+                "Tuesday": [["09:00", "17:00"]],
+                "Wednesday": [["09:00", "17:00"]],
+                "Thursday": [["09:00", "17:00"]],
+                "Friday": [["09:00", "17:00"]],
+                "Saturday": [],
+                "Sunday": [["10:00", "14:00"]],
+            },
+            break_hours={},
+        )
+        inactive_category.save()
+
+        url = f"/api/appointments/availability/?date=2024-12-12&category_id={inactive_category.id}"
+
+        response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "category_id" in response.data
+        assert response.data["category_id"] == ["Category does not accept appointments."]
+    
+    def test_get_availability_no_opening_hours_for_weekday(self):
+        """Test request for a day with no opening hours configured."""
+        url = "/api/appointments/availability/?date=2024-12-06&category_id={}".format(self.category.id)  # Friday, no opening hours
+
+        response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json() == ['Not accepting appointments for Friday.']

@@ -324,3 +324,34 @@ class CreateAppointmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Appointment
         fields = ["user", "category", "organization", "scheduled_time", "scheduled_end_time"]
+
+
+class SlotQueryParamsSerializer(serializers.Serializer):
+    date = serializers.CharField(required=True)
+    category_id = serializers.IntegerField(required=True)
+
+    def validate_date(self, value):
+        """Validate and convert date string to a date object."""
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").date()
+        except ValueError:
+            raise serializers.ValidationError("Invalid date format. Use 'YYYY-MM-DD'.")
+    
+    def validate_category_id(self, value):
+        """Validate if the category exists and is active using the service layer."""
+        category = check_category_is_active(value)
+
+        if not category:
+            raise serializers.ValidationError(
+                "Category does not exist or is not active."
+            )
+        
+        if not category.is_scheduled:
+            raise serializers.ValidationError(
+                "Category does not accept appointments."
+            )
+        return value
+
+    def validate(self, attrs):
+        """Perform cross-field validation if needed."""
+        return attrs

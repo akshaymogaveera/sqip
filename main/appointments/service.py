@@ -10,10 +10,12 @@ from main.service import (
     get_first_counter_for_appointment,
     is_slot_available
 )
-from django.db import models, transaction
+from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
-from datetime import datetime, timedelta
+from datetime import datetime
+from main.models import Appointment
+from main.service import check_category_is_active
 
 def handle_appointment_scheduling(input_data):
     """Handle appointment validation and tracking of unscheduled appointments.
@@ -275,3 +277,64 @@ def is_within_opening_hours(scheduled_time, opening_hours, break_hours, category
 
     # If both checks pass, the time is valid
     return True
+
+
+def get_available_slots_for_category(category_id, query_date):
+    """
+    Retrieves available time slots for a given category and date.
+
+    Args:
+        category_id (int): The ID of the category.
+        query_date (date): The date for which to generate slots.
+
+    Returns:
+        dict: Contains the list of slots with their availability and the count of available slots.
+    """
+    # Retrieve the category
+    category = check_category_is_active(category_id)
+
+    if not category:
+        raise ValidationError(
+            "Category does not exist or is not active."
+        )
+
+    # Validate time interval configuration
+    interval_minutes = category.time_interval_per_appointment.total_seconds() // 60
+
+    # Extract weekday, opening hours, and break hours
+    weekday = query_date.strftime('%A')  # e.g., 'Monday'
+    opening_hours = category.opening_hours.get(weekday)
+    # Check if opening hours for the weekday exist and are not empty
+    if not opening_hours:
+        raise ValidationError(f"Not accepting appointments for {weekday}.")
+
+    break_hours = category.break_hours.get(weekday, [])
+
+    # Generate slots
+    slots = generate_time_slots(opening_hours, break_hours, interval_minutes)
+
+    # Fetch appointments for the day and category
+    appointments = Appointment.objects.filter(
+        category=category,
+        scheduled_time__date=query_date,
+        status="active"
+    ).values_list("scheduled_time", flat=True)
+
+    # Normalize scheduled start times to strings
+    scheduled_start_times = {appointment.strftime("%H:%M") for appointment in appointments}
+
+    # Build response structure
+    response_slots = []
+    available_count = 0
+
+    for start, end in slots:
+        is_taken = start in scheduled_start_times
+        response_slots.append([[start, end], is_taken])
+        if not is_taken:
+            available_count += 1
+
+    return {
+        "date": query_date,
+        "slots": response_slots,
+        "available_count": available_count
+    }
