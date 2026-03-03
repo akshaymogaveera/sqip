@@ -328,9 +328,9 @@ def get_available_slots_for_category(category_id, query_date):
     available_count = 0
 
     for start, end in slots:
-        is_taken = start in scheduled_start_times
+        is_taken = start not in scheduled_start_times
         response_slots.append([[start, end], is_taken])
-        if not is_taken:
+        if is_taken:
             available_count += 1
 
     return {

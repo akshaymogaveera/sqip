@@ -2,15 +2,16 @@ import logging
 from django.http import HttpResponse
 from main.models import User
 from rest_framework.response import Response
-import jsonschema
 from rest_framework import status
 from main.utils import getToken
-from main.verification.utils import twilioSendSms, twilioVerifySms
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny  # Add AllowAny here
 from rest_framework.views import APIView
-from django.http import JsonResponse
 from django.contrib.auth import get_user_model
 from main.decorators import view_set_error_handler
+from django.core.mail import send_mail
+from django.utils.crypto import get_random_string
+from django.core.cache import cache
+from rest_framework_simplejwt.tokens import RefreshToken
 
 logger = logging.getLogger('sqip')
 
@@ -79,45 +80,99 @@ class AuthenticateUser(APIView):
         }, status=status.HTTP_200_OK)
 
 
+class SendOTPView(APIView):
+    permission_classes = [AllowAny]
 
-class sendSms(APIView):
     def post(self, request):
-        phone_number = str(request.POST['phone'])
+        email = request.data.get("email")
 
-        response = twilioSendSms(phone_number)
-        print("status: ", response.status)
-        if response:
-            return Response({'detail': 'OTP sent sucessfully.'}, status=status.HTTP_200_OK)
-        else:
-            return Response({'errors': {"error": "Failed"}}, status=status.HTTP_400_BAD_REQUEST)
+        if not email:
+            return Response({"status": "Failed", "message": "Email is required."}, status=400)
+
+        # Check if the user exists
+        try:
+            user = get_user_model().objects.get(email=email)
+        except get_user_model().DoesNotExist:
+            return Response({"status": "Failed", "message": "User with this email does not exist."}, status=404)
+
+        # Generate a random 6-digit OTP
+        otp = get_random_string(length=6, allowed_chars="0123456789")
+        cache_key = f"otp:{email}"
+        cache.set(cache_key, otp, timeout=300)  # Store OTP in cache for 5 minutes
+
+        # Send OTP via email
+        try:
+            send_mail(
+                "Your OTP Code",
+                f"Your OTP code is {otp}",
+                "no-reply@sqip.com",
+                [email],
+                fail_silently=False,
+            )
+            return Response({"status": "Success", "message": "OTP sent successfully."}, status=200)
+        except Exception as e:
+            logger.error(f"Failed to send OTP: {str(e)}")
+            return Response({"status": "Failed", "message": f"Failed to send OTP: {str(e)}"}, status=500)
 
 
-class verifySms(APIView):
+class UserMeView(APIView):
+    """Return current authenticated user info including groups."""
+
+    permission_classes = (IsAuthenticated,)
+
+    @view_set_error_handler
+    def get(self, request):
+        user = request.user
+        groups = list(user.groups.values('id', 'name'))
+        logger.info("User %d (%s) fetched /api/me/.", user.id, user.username)
+        return Response({
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'is_staff': user.is_staff,
+            'is_superuser': user.is_superuser,
+            'groups': groups,
+        }, status=status.HTTP_200_OK)
+
+
+class VerifyOTPView(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
-        phone_number = str(request.POST['phone'])
-        otp = str(request.POST['otp'])
-        first_name = str(request.POST['first_name'])
-        last_name = str(request.POST['last_name'])
-        response = twilioVerifySms(otp, "+919167119168")
+        email = request.data.get("email")
+        otp = request.data.get("otp")
 
-        if isinstance(response, bool):
-            return Response({'errors': {"error": "Please request a new otp"}}, status=status.HTTP_400_BAD_REQUEST)
+        if not email or not otp:
+            return Response({"status": "Failed", "message": "Email and OTP are required."}, status=400)
 
-        print("status: ", response.status)
-        if response.status == "approved":
-            # Check if user with the given phone number already exists
-            user_exists = User.objects.filter(username=phone_number).exists()
+        # Retrieve the OTP from the cache
+        cache_key = f"otp:{email}"
+        cached_otp = cache.get(cache_key)
 
-            if user_exists:
-                user = User.objects.get(username=phone_number)
-            else:
-                # Create a new user
-                user = User(username=phone_number, first_name=first_name, last_name=last_name)
-                user.save()
+        if cached_otp is None:
+            return Response({"status": "Failed", "message": "OTP has expired or is invalid."}, status=400)
 
-            refresh, access_token = getToken(user)
+        if cached_otp == otp:
+            # OTP is valid
+            cache.delete(cache_key)  # Remove the OTP from the cache after successful verification
 
-            return Response({'refresh': refresh, 'access': access_token, 'id': user.id,
-                                    'userName': user.username}, status=status.HTTP_200_OK)
+            # Retrieve the user
+            try:
+                user = get_user_model().objects.get(email=email)
+            except get_user_model().DoesNotExist:
+                return Response({"status": "Failed", "message": "User not found."}, status=404)
+
+            # Generate tokens
+            refresh = RefreshToken.for_user(user)
+            access_token = str(refresh.access_token)
+
+            return Response({
+                "status": "Success",
+                "message": "OTP verified successfully.",
+                "refresh": str(refresh),
+                "access": access_token,
+                "id": user.id,
+                "username": user.username
+            }, status=200)
         else:
-            return Response({'errors': {"error": "Failed"}}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"status": "Failed", "message": "Invalid OTP."}, status=400)

@@ -182,6 +182,7 @@ class Appointment(models.Model):
         ("active", "Active"),
         ("inactive", "Inactive"),
         ("checkin", "CheckIn"),
+        ("checkout", "CheckOut"),
         ("cancel", "Cancelled"),
         # Add other choices as needed
     ]
@@ -198,6 +199,7 @@ class Appointment(models.Model):
     scheduled_time = models.DateTimeField(null=True, blank=True)
     scheduled_end_time = models.DateTimeField(null=True, blank=True)
     estimated_time = models.DateTimeField(null=True, blank=True)
+    checkout_time = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(
         User,
         on_delete=models.PROTECT,
