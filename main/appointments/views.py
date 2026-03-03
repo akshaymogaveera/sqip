@@ -550,7 +550,10 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
             "Appointment successfully created for user %d.",
             self.request.user.id
         )
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        # Return full appointment representation so client gets id, status and display fields
+        appointment_instance = serializer.instance
+        full_serializer = AppointmentSerializer(appointment_instance, context={'request': request})
+        return Response(full_serializer.data, status=status.HTTP_201_CREATED)
     
 
     @action(detail=False, methods=["get"], url_path="availability")

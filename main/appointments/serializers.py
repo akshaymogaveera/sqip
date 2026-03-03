@@ -51,6 +51,23 @@ class AppointmentSerializer(serializers.ModelSerializer):
         except Exception:
             return None
 
+    # Note: we intentionally do NOT include any category timezone or display-time
+    # fields here. The client requests to avoid client-side timezone conversions
+    # and avoid timezone labels; it will extract the HH:MM from the canonical
+    # scheduled_time value. Keeping the serializer minimal prevents extra
+    # timezone-tagged fields from being returned to the frontend.
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Remove keys with None or empty string values to keep responses concise
+        for key in list(data.keys()):
+            # Keep important fields even if null so clients can show placeholders
+            if key in ("id", "status"):
+                continue
+            if data[key] is None or (isinstance(data[key], str) and data[key] == ""):
+                data.pop(key, None)
+        return data
+
 
 class OrganizationSerializer(serializers.ModelSerializer):
     class Meta:

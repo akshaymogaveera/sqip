@@ -38,8 +38,10 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
      ],
-     'DEFAULT_PARSER_CLASSES': [  # Ensure JSON requests are handled
+     'DEFAULT_PARSER_CLASSES': [  # Allow JSON, form and multipart requests (tests use form-encoded posts)
         'rest_framework.parsers.JSONParser',
+        'rest_framework.parsers.FormParser',
+        'rest_framework.parsers.MultiPartParser',
     ],
 }
 

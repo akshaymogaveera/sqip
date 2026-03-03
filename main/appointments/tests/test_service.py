@@ -1134,7 +1134,9 @@ class TestGetAvailableSlots:
         # Ensure the slot at 09:15 is marked as taken
         slot_times = [slot[0][0] for slot in result["slots"]]
         assert "09:15" in slot_times  # Slot 09:15 should be present
-        assert result["slots"][slot_times.index("09:15")][1] is True  # Slot 09:15 should be taken
+        # The project logic was updated: slot[1] == True now means available,
+        # so a taken slot will have False here.
+        assert result["slots"][slot_times.index("09:15")][1] is False  # Slot 09:15 should be taken
 
         # Check available count after taking one slot
         assert result["available_count"] < len(result["slots"])
@@ -1207,9 +1209,10 @@ class TestGetAvailableSlots:
         # Ensure 12:00-12:15 is marked as taken and 12:15-12:30 is available
         slot_times = [slot[0][0] for slot in result["slots"]]
         assert "13:00" in slot_times
-        assert result["slots"][slot_times.index("13:00")][1] is True  # Slot 13:00 should be taken (after break)
+        # With the updated convention (True == available), taken slots are False
+        assert result["slots"][slot_times.index("13:00")][1] is False  # Slot 13:00 should be taken (after break)
         assert "13:15" in slot_times
-        assert result["slots"][slot_times.index("13:15")][1] is False  # Slot 13:15 should be available (after break)
+        assert result["slots"][slot_times.index("13:15")][1] is True  # Slot 13:15 should be available (after break)
 
     def test_edge_case_appointment_at_start_of_day(self):
         """Test appointment at the exact start time of the day (09:00)"""
@@ -1229,7 +1232,7 @@ class TestGetAvailableSlots:
         # Ensure that the slot at 09:00 is marked as taken
         slot_times = [slot[0][0] for slot in result["slots"]]
         assert "09:00" in slot_times
-        assert result["slots"][slot_times.index("09:00")][1] is True  # Slot 09:00 should be taken
+        assert result["slots"][slot_times.index("09:00")][1] is False  # Slot 09:00 should be taken
 
     def test_edge_case_appointment_at_end_of_day(self):
         """Test appointment at the exact end time of the day (16:45)"""
@@ -1249,7 +1252,7 @@ class TestGetAvailableSlots:
         # Ensure that the slot at 16:45 is marked as taken
         slot_times = [slot[0][0] for slot in result["slots"]]
         assert "16:45" in slot_times
-        assert result["slots"][slot_times.index("16:45")][1] is True  # Slot 16:45 should be taken
+        assert result["slots"][slot_times.index("16:45")][1] is False  # Slot 16:45 should be taken
 
     def test_no_slots_with_appointments_at_all_times(self):
         """Test that when appointments exist for all slots, no slots are available."""
@@ -1270,7 +1273,8 @@ class TestGetAvailableSlots:
 
         # Ensure no available slots
         assert result["available_count"] == 0
-        assert all(slot[1] is True for slot in result["slots"])  # All slots should be taken
+        # All slots should be taken; with True==available, expect False for each
+        assert all(slot[1] is False for slot in result["slots"])  # All slots should be taken
 
     def test_multiple_appointments_in_same_slot(self):
         """Test handling of multiple appointments in the same slot (edge case)."""
@@ -1297,4 +1301,4 @@ class TestGetAvailableSlots:
         # Ensure the slot at 09:15 is marked as taken (only once)
         slot_times = [slot[0][0] for slot in result["slots"]]
         assert "09:15" in slot_times
-        assert result["slots"][slot_times.index("09:15")][1] is True  # Slot 09:15 should be taken
+        assert result["slots"][slot_times.index("09:15")][1] is False  # Slot 09:15 should be taken
