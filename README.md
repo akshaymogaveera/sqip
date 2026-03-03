@@ -1,6 +1,115 @@
 # sqip
 
-------------------------------------------------------------------------------------------------
+
+## API Changes (2024-06)
+
+### 1. Appointment Checkout Endpoint
+
+**URL:** `/api/appointments/<appointment_id>/checkout/` (POST)
+
+Records the checkout time for an appointment. Only superusers, group admins, or appointment creator can checkout.
+
+**Sample Response:**
+```
+{
+    "detail": "Appointment status updated to 'checkout' successfully.",
+    "checkout_time": "2024-06-01T15:23:45.123Z"
+}
+```
+
+**Notes:**
+- Checkout does not affect the active counter if appointment was already checked in.
+- Appointment status will be set to `checkout`.
+
+---
+
+### 2. Organization Public Landing Endpoint
+
+**URL:** `/api/organizations/<organization_id>/landing/` (GET)
+
+Returns public info for an organization, suitable for direct linking or QR code navigation.
+
+**Sample Response:**
+```
+{
+    "id": 1,
+    "name": "Arfa",
+    "city": "Mumbai",
+    "state": "Maharashtra",
+    "country": "India",
+    "type": "restaurant",
+    "status": "active",
+    "categories": [ ... ]
+}
+```
+
+---
+
+### 3. User Profile Endpoint
+
+**URL:** `/api/me/` (GET)
+
+Returns info about the currently authenticated user.
+
+**Sample Response:**
+```
+{
+    "id": 3,
+    "username": "test",
+    "email": "test@example.com",
+    "phone_number": "+1234567890",
+    "is_admin": true
+}
+```
+
+---
+
+### 4. Appointment Serializer Enrichments
+
+All appointment-related endpoints now include:
+- `user_email`: Email of the user who booked the appointment
+- `user_phone`: Phone number of the user
+- `organization_name`: Name of the organization
+- `category_name`: Name of the category
+
+**Sample Response Addition:**
+```
+{
+    ...
+    "user_email": "test@example.com",
+    "user_phone": "+1234567890",
+    "organization_name": "Arfa",
+    "category_name": "Dining"
+}
+```
+
+---
+
+### 5. Direct Organization Booking via URL
+
+You can now navigate directly to an organization booking page using:
+`/org/<organization_id>` (frontend route)
+
+This enables future QR code integration for direct appointment booking.
+
+---
+
+### 6. Counter Logic Clarification
+
+- If a checked-in appointment is cancelled, the active counter is **not** decremented (since it was already checked in).
+- Only cancelling active (not checked-in) appointments affects the counter.
+
+---
+
+python3 -m venv sqip  
+source sqip/bin/activate
+python manage.py migrate
+
+# First time use
+source bin/activate && python manage.py migrate
+python manage.py createsuperuser
+
+
 > Auth
 Get auth token, Select Auth type as "No Auth"
 

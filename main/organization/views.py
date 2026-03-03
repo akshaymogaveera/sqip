@@ -3,12 +3,13 @@ from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFilter
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.pagination import PageNumberPagination
-from main.models import Organization
+from main.models import Organization, Category
 from main.organization.serializers import OrganizationSerializer
+from main.category.serializers import CategorySerializer
 from main.decorators import view_set_error_handler
 
 logger = logging.getLogger('sqip')
@@ -118,3 +119,27 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(active_orgs, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'], url_path='landing', permission_classes=[AllowAny])
+    @view_set_error_handler
+    def landing(self, request, pk=None):
+        """
+        Public landing endpoint for QR-code / direct-link access.
+        Returns org details + its active categories so the frontend can
+        render a booking page without requiring the user to search first.
+
+        No authentication required — the user will be prompted to log in
+        when they actually attempt to book.
+        """
+        organization = get_object_or_404(Organization, pk=pk, status='active')
+        org_serializer = OrganizationSerializer(organization)
+
+        categories = Category.objects.filter(
+            organization=organization, status='active'
+        ).order_by('name')
+        cat_serializer = CategorySerializer(categories, many=True)
+
+        return Response({
+            "organization": org_serializer.data,
+            "categories": cat_serializer.data,
+        }, status=status.HTTP_200_OK)

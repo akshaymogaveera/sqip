@@ -12,6 +12,7 @@ from main.service import (
     get_unscheduled_appointments_for_user,
     get_user_appointments,
     set_appointment_status_and_update_counter,
+    checkout_appointment,
 )
 from rest_framework.permissions import IsAuthenticated
 
@@ -372,6 +373,47 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
             logger.error(
                 "Failed to cancel appointment %s: %s",
                 pk, message
+            )
+            return Response({"errors": message}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["post"], url_path="checkout")
+    @view_set_error_handler
+    def checkout(self, request, pk=None):
+        """Check out a checked-in appointment, recording the checkout time.
+
+        Only staff / group admins with category access may call this endpoint.
+
+        Args:
+            request: The HTTP request.
+            pk: Primary key of the appointment.
+
+        Returns:
+            Response: 200 on success, 400 on failure.
+        """
+        user = self.request.user
+        query_params_serializer = AppointmentIDValidatorSerializer(
+            data={"appointment_id": pk},
+            context={"request": request, "check_creator": False},
+        )
+        query_params_serializer.is_valid(raise_exception=True)
+        appointment_id = query_params_serializer.validated_data["appointment_id"]
+
+        logger.info(
+            "User %d (%s) is attempting to checkout appointment %s.",
+            user.id, user.username, pk,
+        )
+
+        success, message = checkout_appointment(appointment_id, user)
+
+        if success:
+            logger.info(
+                "User %d successfully checked-out appointment %s.",
+                user.id, pk,
+            )
+            return Response({"detail": message}, status=status.HTTP_200_OK)
+        else:
+            logger.error(
+                "Failed to checkout appointment %s: %s", pk, message
             )
             return Response({"errors": message}, status=status.HTTP_400_BAD_REQUEST)
 

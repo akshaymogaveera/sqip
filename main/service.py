@@ -218,7 +218,9 @@ def check_if_user_has_authorized_category_access(
 
 def set_appointment_status_and_update_counter(appointment_id, status, user, ignore_status=False):
     """Set the status of an appointment and update the 'updated_by' field.
-    Decrement the counter of all the appointments in the queue above it, if status is updated(except "active").
+    Decrement the counter of all the appointments in the queue above it, only if the
+    appointment was previously 'active' (checked-in or already-checked-out appointments
+    have already left the active queue, so counters must not be touched again).
 
     Args:
         appointment_id (int): ID of the appointment to update.
@@ -238,16 +240,48 @@ def set_appointment_status_and_update_counter(appointment_id, status, user, igno
     if appointment is None:
         return False, "Appointment does not exist."
 
+    # Only decrement counters for appointments that are currently active/inactive.
+    # If the appointment was already checked-in or checked-out, it has already been
+    # removed from the active queue counter, so we skip adjustment.
+    was_in_active_queue = appointment.status in ("active", "inactive")
+
     # Update the status
     appointment.status = status
     appointment.updated_by = user
     appointment.save()  # Save the changes to the database
 
-    # Decrement all appointments above it.
-    if appointment.status != "active":
+    # Decrement all appointments above it only if it was in the active queue.
+    if status != "active" and was_in_active_queue:
         adjust_appointment_counter(appointment, False, appointment.counter)
 
     return True, f"Appointment status updated to '{status}' successfully."
+
+
+def checkout_appointment(appointment_id, user):
+    """Check out a checked-in appointment.
+
+    Records the checkout_time. Does NOT adjust queue counters because a checked-in
+    appointment has already left the active queue — its position was freed at check-in time.
+
+    Args:
+        appointment_id (int): ID of the appointment to check out.
+        user (User): The user performing the checkout.
+
+    Returns:
+        tuple: (bool, str) indicating success and a message.
+    """
+    appointment = get_appointment_by_id(appointment_id, ignore_status=True)
+    if appointment is None:
+        return False, "Appointment does not exist."
+    if appointment.status != "checkin":
+        return False, "Only checked-in appointments can be checked out."
+
+    appointment.status = "checkout"
+    appointment.checkout_time = timezone.now()
+    appointment.updated_by = user
+    appointment.save()
+
+    return True, "Appointment checked out successfully."
 
 
 def adjust_appointment_counter(appointment, increment, reference_counter, counter_limit=None) -> None:

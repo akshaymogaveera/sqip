@@ -17,9 +17,39 @@ from main.utils import convert_time_to_utc
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
+    organization_name = serializers.SerializerMethodField()
+    category_name = serializers.SerializerMethodField()
+    category_description = serializers.SerializerMethodField()
+    username = serializers.SerializerMethodField()
+    user_email = serializers.SerializerMethodField()
+    user_phone = serializers.SerializerMethodField()
+
     class Meta:
         model = Appointment
         fields = "__all__"
+
+    def get_organization_name(self, obj):
+        return obj.organization.name if obj.organization else None
+
+    def get_category_name(self, obj):
+        if obj.category:
+            return obj.category.name or obj.category.description
+        return None
+
+    def get_category_description(self, obj):
+        return obj.category.description if obj.category else None
+
+    def get_username(self, obj):
+        return obj.user.username if obj.user else None
+
+    def get_user_email(self, obj):
+        return obj.user.email if obj.user else None
+
+    def get_user_phone(self, obj):
+        try:
+            return obj.user.profile.phone_number
+        except Exception:
+            return None
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
