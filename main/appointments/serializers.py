@@ -11,6 +11,7 @@ from main.service import (
     get_authorized_categories_for_user,
 )
 from rest_framework import serializers, status
+import phonenumbers
 from main.models import Appointment, Category, Organization
 from main.appointments.service import validate_scheduled_appointment
 from main.utils import convert_time_to_utc
@@ -23,6 +24,8 @@ class AppointmentSerializer(serializers.ModelSerializer):
     username = serializers.SerializerMethodField()
     user_email = serializers.SerializerMethodField()
     user_phone = serializers.SerializerMethodField()
+    user_first_name = serializers.SerializerMethodField()
+    user_last_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Appointment
@@ -45,9 +48,25 @@ class AppointmentSerializer(serializers.ModelSerializer):
     def get_user_email(self, obj):
         return obj.user.email if obj.user else None
 
+    def get_user_first_name(self, obj):
+        try:
+            return obj.user.first_name if obj.user and obj.user.first_name else None
+        except Exception:
+            return None
+
+    def get_user_last_name(self, obj):
+        try:
+            return obj.user.last_name if obj.user and obj.user.last_name else None
+        except Exception:
+            return None
+
     def get_user_phone(self, obj):
         try:
-            return obj.user.profile.phone_number
+            phone = obj.user.profile.phone_number
+            # Ensure we return a JSON-serializable string (or None)
+            if phone:
+                return str(phone)
+            return None
         except Exception:
             return None
 
@@ -80,14 +99,6 @@ class ValidateAppointmentInput(serializers.Serializer):
     category = serializers.IntegerField(required=True)
     user = serializers.IntegerField(required=True)
 
-    def validate_organization(self, value):
-        """Validate if the organization exists and is active using the service layer."""
-        organization = check_organization_is_active(value)
-        if not organization:
-            raise serializers.ValidationError(
-                "Organization does not exist or is not active."
-            )
-        return value
 
     def validate_category(self, value):
         """Validate if the category exists and is active using the service layer."""
@@ -401,4 +412,36 @@ class SlotQueryParamsSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         """Perform cross-field validation if needed."""
+        return attrs
+
+
+class AdminAddUserToQueueSerializer(serializers.Serializer):
+    organization = serializers.IntegerField(required=True)
+    category = serializers.IntegerField(required=True)
+    first_name = serializers.CharField(required=True, max_length=150)
+    last_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
+    phone = serializers.CharField(required=True, max_length=50)
+    email = serializers.EmailField(required=False, allow_blank=True)
+
+    def validate_phone(self, value):
+        # Expect an international number; normalize to E.164
+        v = (value or '').strip()
+        try:
+            parsed = phonenumbers.parse(v, None)
+        except Exception:
+            raise serializers.ValidationError('Invalid phone number format')
+
+        if not phonenumbers.is_valid_number(parsed):
+            raise serializers.ValidationError('Phone number is not a valid international number')
+
+        try:
+            e164 = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+        except Exception:
+            raise serializers.ValidationError('Failed to normalize phone number')
+        return e164
+
+    def validate(self, attrs):
+        # normalize phone into validated data
+        phone = attrs.get('phone')
+        attrs['phone'] = self.validate_phone(phone)
         return attrs

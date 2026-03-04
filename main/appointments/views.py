@@ -21,6 +21,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.decorators import action
 from main.models import Appointment
+from django.contrib.auth import get_user_model
+from main.models import Profile
 from main.appointments.serializers import (
     AppointmentIDValidatorSerializer,
     AppointmentListValidate,
@@ -32,6 +34,7 @@ from main.appointments.serializers import (
     ValidateAppointmentInput,
     AppointmentListQueryParamsSerializer,
     ValidateScheduledAppointmentInput,
+    AdminAddUserToQueueSerializer,
 )
 from rest_framework.pagination import PageNumberPagination
 import logging
@@ -582,3 +585,123 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         )
 
         return Response(available_slots)
+
+    @action(detail=False, methods=["post"], url_path="add_user_to_queue")
+    @view_set_error_handler
+    def add_user_to_queue(self, request):
+        """
+        Admin endpoint: create a user (if not exists) and add them to an unscheduled category queue.
+
+        Expected payload:
+        {
+            "organization": 1,
+            "category": 2,
+            "first_name": "First",
+            "last_name": "Last",
+            "phone": "+911234567890",
+            "email": "optional@example.com"
+        }
+        """
+        serializer = AdminAddUserToQueueSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        org_id = data["organization"]
+        category_id = data["category"]
+
+        # Validate organization and category
+        from main.service import check_organization_is_active, check_category_is_active
+        organization = check_organization_is_active(org_id)
+        if not organization:
+            return Response({"errors": "Organization does not exist or is not active."}, status=status.HTTP_400_BAD_REQUEST)
+
+        category = check_category_is_active(category_id, organization)
+        if not category:
+            return Response({"errors": "Category does not exist or is not accepting appointments."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Only allow adding to queue for unscheduled categories
+        if category.is_scheduled:
+            return Response({"errors": "Cannot add to queue for a scheduled category."}, status=status.HTTP_400_BAD_REQUEST)
+
+        User = get_user_model()
+
+        phone = data["phone"].strip()
+        email = data.get("email", "").strip()
+
+        # Try to find existing user by email or phone
+        user = None
+
+
+        if not user:
+            # Try by phone via Profile
+            try:
+                profile = Profile.objects.filter(phone_number=phone).select_related("user").first()
+                if profile:
+                    user = profile.user
+                    # If admin provided names and the user record is missing them, update user
+                    fn = data.get("first_name")
+                    ln = data.get("last_name")
+                    updated = False
+                    if fn and (not user.first_name or user.first_name.strip() == ''):
+                        user.first_name = fn
+                        updated = True
+                    if ln and (not user.last_name or user.last_name.strip() == ''):
+                        user.last_name = ln
+                        updated = True
+                    if updated:
+                        user.save()
+            except Exception:
+                user = None
+
+        from django.db import transaction
+        try:
+            with transaction.atomic():
+                if not user:
+                    # Create new user
+                    # Generate a unique username: prefer email localpart else phone-based
+                    username_base = "user" + phone[-6:]
+                    username = username_base
+                    suffix = 0
+                    while User.objects.filter(username=username).exists():
+                        suffix += 1
+                        username = f"{username_base}{suffix}"
+                    user = User.objects.create_user(username=username, email=email or "")
+                    user.first_name = data.get("first_name") or ''
+                    user.last_name = data.get("last_name") or ''
+                    # leave password unusable
+                    user.set_unusable_password()
+                    user.save()
+
+                    # create profile with phone
+                    profile = Profile.objects.create(user=user, phone_number=phone)
+
+                # Now create appointment: reuse scheduling logic
+                appointment_payload = {"organization": org_id, "category": category_id, "user": user.id}
+                from main.appointments.service import handle_appointment_scheduling
+                counter, err = handle_appointment_scheduling(appointment_payload)
+                if err:
+                    return Response({"errors": err}, status=status.HTTP_400_BAD_REQUEST)
+
+                # double-check duplicates
+                from main.service import check_duplicate_appointment
+                if check_duplicate_appointment(user.id, organization, category):
+                    return Response({"errors": "Appointment already exists for user."}, status=status.HTTP_400_BAD_REQUEST)
+
+                # Create appointment record
+                appointment = Appointment.objects.create(
+                    user=user,
+                    category=category,
+                    organization=organization,
+                    counter=counter,
+                    status="active",
+                    is_scheduled=False,
+                    created_by=request.user,
+                )
+
+        except Exception as e:
+            # If profile creation or phone parsing failed, return error
+            return Response({"errors": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Return created appointment representation
+        resp = AppointmentSerializer(appointment, context={"request": request}).data
+        return Response(resp, status=status.HTTP_201_CREATED)

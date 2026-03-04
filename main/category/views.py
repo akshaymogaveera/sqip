@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFilter
 from rest_framework.filters import SearchFilter, OrderingFilter
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.exceptions import ValidationError
 from main.decorators import view_set_error_handler
@@ -126,13 +126,15 @@ class CategoryViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
-    @action(detail=False, methods=["get"], url_path="active")
+    @action(detail=False, methods=["get"], url_path="active", permission_classes=[AllowAny], authentication_classes=[])
     @view_set_error_handler
     def active(self, request):
         """
         Custom action to list all active categories.
         """
-        logger.info("User %d (%s) is listing active categories.", request.user.id, request.user.username)
+        user_id = getattr(request.user, 'id', None)
+        username = getattr(request.user, 'username', 'anonymous')
+        logger.info("User %s (%s) is listing active categories.", user_id, username)
         active_categories = self.filter_queryset(self.get_queryset().filter(status="active"))
         page = self.paginate_queryset(active_categories)
         

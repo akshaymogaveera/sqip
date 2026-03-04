@@ -103,13 +103,15 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=['get'], url_path='active')
+    @action(detail=False, methods=['get'], url_path='active', permission_classes=[AllowAny], authentication_classes=[])
     @view_set_error_handler
     def active_organizations(self, request):
         """
         Custom action to retrieve all active organizations.
         """
-        logger.info("User %d (%s) is retrieving active organizations.", request.user.id, request.user.username)
+        user_id = getattr(request.user, 'id', None)
+        username = getattr(request.user, 'username', 'anonymous')
+        logger.info("User %s (%s) is retrieving active organizations.", user_id, username)
         active_orgs = self.filter_queryset(self.get_queryset().filter(status='active'))
         page = self.paginate_queryset(active_orgs)
         
@@ -120,7 +122,7 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(active_orgs, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=['get'], url_path='landing', permission_classes=[AllowAny])
+    @action(detail=True, methods=['get'], url_path='landing', permission_classes=[AllowAny], authentication_classes=[])
     @view_set_error_handler
     def landing(self, request, pk=None):
         """

@@ -1,3 +1,4 @@
+from phonenumber_field.modelfields import PhoneNumberField
 from datetime import timedelta
 from django.core.exceptions import ValidationError
 from datetime import datetime
@@ -8,6 +9,7 @@ from django.utils import timezone
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.forms.models import model_to_dict
+import phonenumbers
 
 # Create your models here.
 
@@ -223,7 +225,22 @@ class Appointment(models.Model):
         Returns:
             dict: Dictionary representation of the Appointment instance.
         """
-        return model_to_dict(self)
+        data = model_to_dict(self)
+
+        # recursively convert any phonenumbers.PhoneNumber objects to strings
+        def _convert(obj):
+            if isinstance(obj, dict):
+                return {k: _convert(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [_convert(v) for v in obj]
+            try:
+                if isinstance(obj, phonenumbers.phonenumber.PhoneNumber):
+                    return str(obj)
+            except Exception:
+                pass
+            return obj
+
+        return _convert(data)
 
 class SubCategory(models.Model):
     category = models.ForeignKey(Category, on_delete=models.PROTECT)
@@ -239,6 +256,15 @@ class AppointmentMapToSubCategory(models.Model):
 
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
-    phone_number = models.CharField(max_length=15)
+    # Phone is the primary identifier for regular users; must be unique across all profiles.
+    # Admins / staff may leave it blank.
+    phone_number = PhoneNumberField(blank=True, null=True, unique=True)
     otp = models.CharField(max_length=100, null=True, blank=True)
     uid = models.CharField(default=f"{uuid.uuid4}", max_length=200)
+
+    def clean(self):
+        super().clean()
+        # Regular users (not staff, not superuser, no groups) must have a phone number.
+        if not self.user.is_staff and not self.user.is_superuser and self.user.groups.count() == 0:
+            if not self.phone_number:
+                raise ValidationError("Phone number is required for regular users.")

@@ -122,8 +122,9 @@ class TestMakeAppointment:
         response = self.client.post(url, data, format="json")
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+        # API returns errors under the "errors" key with an appointment error message
         assert response.json() == {
-            "organization": ["Organization does not exist or is not active."]
+            "errors": {"appointment": ["Organization does not exist or is not accepting appointments."]}
         }
 
     def test_make_appointment_category_not_active(self):

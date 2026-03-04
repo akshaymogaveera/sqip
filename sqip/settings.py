@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'django_filters',
     'django_extensions',
+    'phonenumber_field',
 ]
 
 MIDDLEWARE = [
