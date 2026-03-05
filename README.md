@@ -1,639 +1,282 @@
-# sqip
+# SQIP — Backend API & Developer Guide
 
+This README documents back-end setup and groups the API endpoints by area (Authentication, Organizations, Categories, Appointments, OTP). It preserves example payloads and response shapes from the original doc while putting setup instructions at the top for quick onboarding.
 
-## API Changes (2024-06)
+Table of contents
+- Quick setup
+- Running tests
+- API reference (grouped)
+  - Authentication & user
+  - Organizations
+  - Categories
+  - Appointments
+  - OTP (email)
+- Error formats
+- Where to find code
 
-### 1. Appointment Checkout Endpoint
+Quick setup (recommended)
+1. Create a virtual environment and activate it (recommended):
 
-**URL:** `/api/appointments/<appointment_id>/checkout/` (POST)
+   python3 -m venv .venv
+   source .venv/bin/activate
 
-Records the checkout time for an appointment. Only superusers, group admins, or appointment creator can checkout.
+   (The repo also contains a convenience `bin/` venv that some developers use: `source bin/activate`.)
 
-**Sample Response:**
+2. Install dependencies:
+
+   pip install -r requirements.txt
+
+3. Apply migrations and create a superuser:
+
+   python manage.py migrate
+   python manage.py createsuperuser
+
+4. Run the dev server:
+
+   python manage.py runserver
+
+Running tests
+
+  pytest -q
+
+API reference (grouped)
+Below are the commonly used endpoints grouped by functionality. For each endpoint I include URL, method, brief description and a sample request/response where helpful.
+
+Authentication & user
+---------------------
+
+1) POST /api/auth/
+- Purpose: Authenticate by phone number or username and return JWT tokens. The endpoint supports `identifier` (preferred), legacy `username`, or `phone` in the request body.
+- Request examples:
+  - { "identifier": "+911234567890" }
+  - { "identifier": "admin_username" }
+- Responses:
+  - 200 OK: { status: "Success", refresh, access, id, username, first_name, last_name }
+  - 400 Bad Request: { status: "Failed", message: "Phone number or username is required" }
+  - 404 Not Found: { status: "Failed", message: "User not found" }
+
+2) POST /api/register/
+- Purpose: Register a new user (phone is primary identifier). Returns JWT tokens on success.
+- Request example:
+  {
+    "first_name": "Palakh",
+    "last_name": "Kanwar",
+    "phone": "+911234567890",
+    "email": "optional@example.com"
+  }
+- Notes: phone is normalized to E.164 using `phonenumbers` and must be unique.
+- Response (201): tokens + user fields
+
+3) GET /api/me/
+- Purpose: Return current authenticated user's info including groups.
+- Response example:
+  {
+    id, username, first_name, last_name, email, phone, is_staff, is_superuser, groups: [...] 
+  }
+
+4) GET /api/validate/token/ (authenticated)
+- Purpose: Validate and refresh tokens. Returns new tokens when valid.
+
+Organizations
+-------------
+
+1) GET /api/organizations/ — List organizations
+- Filters: status, type, city, country, name, search across multiple fields
+- Pagination supported via `?page=` and `?page_size=`.
+
+2) GET /api/organizations/active/ — List active organizations
+
+3) GET /api/organizations/<id>/ — Retrieve specific organization
+
+4) GET /api/organizations/<id>/landing/ — Public landing info suitable for direct linking or QR codes
+
+Sample organization response:
 ```
 {
-    "detail": "Appointment status updated to 'checkout' successfully.",
-    "checkout_time": "2024-06-01T15:23:45.123Z"
+  "id": 1,
+  "name": "Arfa",
+  "city": "Mumbai",
+  "state": "Maharashtra",
+  "country": "India",
+  "type": "restaurant",
+  "status": "active",
+  "groups": [1]
 }
 ```
 
-**Notes:**
-- Checkout does not affect the active counter if appointment was already checked in.
-- Appointment status will be set to `checkout`.
+Categories
+----------
 
----
+1) GET /api/categories/ — List categories
+- Filters: status, type, description, organization (accepts single ID or comma-separated list)
 
-### 2. Organization Public Landing Endpoint
+2) GET /api/categories/active/ — List active categories
 
-**URL:** `/api/organizations/<organization_id>/landing/` (GET)
+3) GET /api/categories/user/ — Categories associated with the requesting user's groups
 
-Returns public info for an organization, suitable for direct linking or QR code navigation.
+4) PATCH /api/categories/<id>/update-status/ — Toggle category status (superusers / group admins). Note: flipping a category to inactive moves its appointments to the end of the queue.
 
-**Sample Response:**
+Categories example response (paginated):
 ```
 {
-    "id": 1,
-    "name": "Arfa",
-    "city": "Mumbai",
-    "state": "Maharashtra",
-    "country": "India",
-    "type": "restaurant",
-    "status": "active",
-    "categories": [ ... ]
+  "count": 2,
+  "results": [ ... ]
 }
 ```
 
----
+Appointments
+------------
 
-### 3. User Profile Endpoint
+Common endpoints and notes for scheduling and walk-ins.
 
-**URL:** `/api/me/` (GET)
+1) POST /api/appointments/unschedule/ — Create an unscheduled (walk-in) appointment
+- Body: { organization: <id>, category: <id>, user: <id> }
+- Response (201): appointment object including `counter` and `is_scheduled=false`.
+- Error shape: validation errors are returned under `errors` (for example `{ "errors": { "appointment": ["..."] } }`).
 
-Returns info about the currently authenticated user.
+2) POST /api/appointments/schedule/ — Create a scheduled appointment
+- Note: the target `Category` must be configured with scheduling fields (opening_hours, break_hours, time_interval_per_appointment, time_zone, max_advance_days). Example payload for creating category scheduling is shown below.
 
-**Sample Response:**
+3) GET /api/appointments/availability/?date=<date>&category_id=<id> — Get available slots for a date + category
+
+4) POST /api/appointments/<id>/check-in/ — Check in an appointment
+
+5) POST /api/appointments/<id>/checkout/ — Record checkout time (permissions apply)
+
+6) POST /api/appointments/<id>/cancel/ — Cancel appointment (counter behavior depends on status)
+
+7) POST /api/appointments/<id>/move/ — Move an appointment position in the queue (admin/group operations)
+
+Scheduling example (category scheduling config):
 ```
 {
-    "id": 3,
-    "username": "test",
-    "email": "test@example.com",
-    "phone_number": "+1234567890",
-    "is_admin": true
-}
-```
-
----
-
-### 4. Appointment Serializer Enrichments
-
-All appointment-related endpoints now include:
-- `user_email`: Email of the user who booked the appointment
-- `user_phone`: Phone number of the user
-- `organization_name`: Name of the organization
-- `category_name`: Name of the category
-
-**Sample Response Addition:**
-```
-{
+  "time_zone": "Canada/Eastern",
+  "opening_hours": {
+    "Monday": [["09:00","17:00"]],
+    "Tuesday": [["09:00","17:00"]],
     ...
-    "user_email": "test@example.com",
-    "user_phone": "+1234567890",
-    "organization_name": "Arfa",
-    "category_name": "Dining"
+  },
+  "break_hours": {
+    "Monday": [["12:00","13:00"]],
+    ...
+  },
+  "time_interval_per_appointment": "00:15:00",
+  "max_advance_days": 7
 }
 ```
 
----
-
-### 5. Direct Organization Booking via URL
-
-You can now navigate directly to an organization booking page using:
-`/org/<organization_id>` (frontend route)
-
-This enables future QR code integration for direct appointment booking.
-
----
-
-### 6. Counter Logic Clarification
-
-- If a checked-in appointment is cancelled, the active counter is **not** decremented (since it was already checked in).
-- Only cancelling active (not checked-in) appointments affects the counter.
-
----
-
-python3 -m venv sqip  
-source sqip/bin/activate
-python manage.py migrate
-
-# First time use
-source bin/activate && python manage.py migrate
-python manage.py createsuperuser
-
-
-> Auth
-Get auth token, Select Auth type as "No Auth"
-
-URL: ```api/auth/``` (POST)
-Body
-```
-{"username": "test"}
-```
-
-Sample Response:
+Appointments availability response example (slots with boolean available flag):
 ```
 {
-    "status": "Success",
-    "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTczMDA3ODU5MywiaWF0IjoxNzI5OTkyMTkzLCJqdGkiOiI3ZGI2YzEyZGU2ZmQ0MTY1YjI1MDk0MjdkMDdiN2RjYiIsInVzZXJfaWQiOjN9.y7jA6YeAzXjOi0xmJ0VX9Vjj2mEV3WsbS3xiw0VL8zc",
-    "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzMwMTAwMTkzLCJpYXQiOjE3Mjk5OTIxOTMsImp0aSI6IjdlMjU2NDY5OWIzZjQ0ZmViNjFkNjZjMGNiYTNiMzQyIiwidXNlcl9pZCI6M30.ERsw_zENrK0ZkpUOb2wyQHFGJM7N9IW25tQyhdMKN58",
-    "id": 3,
-    "username": "test"
+  "date": "2024-12-12",
+  "slots": [ [["09:00","09:15"], false], [["09:15","09:30"], true], ... ]
 }
 ```
 
+OTP (email)
+-----------
 
-------------------------------------------------------------------------------------------------
+1) POST /api/send/otp/ — Send OTP to an email address (body: { email })
+2) POST /api/verify/otp/ — Verify OTP (body: { email, otp })
 
-> Get Organization
+Note: OTP endpoints are optional and the frontend may comment out the OTP flow per UX choices.
 
-URL: ```api/organizations/<organization_id>/``` (GET)
+Error formats and conventions
+----------------------------
+- Validation and business errors are commonly returned under an `errors` key. For example:
 
+  { "errors": { "appointment": ["Organization does not exist or is not accepting appointments."] } }
 
-Sample Response:
-```
-{
-    "id": 1,
-    "name": "Arfa",
-    "created_by": 1,
-    "portfolio_site": "",
-    "display_picture": null,
-    "city": "Mumbai",
-    "state": "Maharashtra",
-    "country": "India",
-    "type": "restaurant",
-    "status": "active",
-    "groups": [
-        1
-    ]
-}
-```
-------------------------------------------------------------------------------------------------
+- Authentication errors follow DRF defaults (401 with `detail`), and some endpoints use `{ status: 'Failed', message: '...' }` for legacy flows.
 
-> List Organization
+Where to find code
+------------------
+- `main/login/views.py` — AuthenticateUser, RegisterUser, ValidateToken, OTP endpoints
+- `main/appointments/views.py` & `main/appointments/service.py` — endpoints and business logic for scheduling, counters, and validation
+- `main/organization/views.py`, `main/category/views.py` — organization/category CRUD and filters
 
-For all organizations:
-    URL: ```api/organizations/``` (GET)
-for active organizations:
-    URL: ```api/organizations/active/``` (GET)
+Application model & relationships
+---------------------------------
 
-### Filter Examples
-- `?status=active` - Filters organizations by status.
-- `?type=clinic` - Filters organizations by type, such as `clinic`.
-- `?city=New York` - Case-insensitive search by city name containing `New York`.
-- `?country=Canada` - Case-insensitive search by country containing `Canada`.
-- `?name=Arteria` - Case-insensitive search by organization name containing `Arteria`.
+High-level data model and expected relationships you should know when working on the backend and frontend.
 
-### Search Example
-- `?search=tech` - Searches across name, city, state, country, and type fields for matches with `tech`.
+- Organization -> Categories -> Appointments
+    - An `Organization` (clinic, restaurant, service provider) owns multiple `Category` records.
+    - Each `Category` represents a service or queue (for example, "Walk-in", "Consultation", or "Drive-through").
+    - `Appointment` belongs to an `Organization` and a `Category`. The frontend lists categories for an organization when booking.
 
-### Ordering Examples
-- `?ordering=name` - Orders organizations by name (ascending).
-- `?ordering=-name` - Orders organizations by name (descending).
-- `?ordering=city` - Orders organizations by city.
-- `?ordering=state,-country` - Orders organizations by state (ascending) and country (descending).
+- Status flags
+    - `Organization.status` and `Category.status` are either `active` or `inactive`.
+        - Inactive organizations or categories are not accepting appointments and will cause appointment creation to return a 400 error (see tests and `appointments` endpoints).
+    - `Appointment.status` can be `active`, `inactive`, `checkin`, `checkout`, `cancel`, etc. Business logic in `main/appointments/service.py` controls transitions and counters.
 
-### Pagination Examples
-- `?page=1` - Returns the first page of results.
-- `?page_size=5` - Adjusts the number of items per page (default is 10, maximum is 100).
+- Appointment types
+    - `is_scheduled`: boolean flag on Appointment
+        - `is_scheduled = true` => scheduled appointment (requires category scheduling configuration)
+        - `is_scheduled = false` => unscheduled / walk-in
 
-### Endpoint Examples
-- **Retrieve specific organization by ID**: `/organizations/<id>/`
-- **List organizations with filters, search, and pagination**: `/organizations/?status=active&type=clinic&city=New York`
-- **Custom action for active organizations**: `/organizations/active/` (lists organizations with `status=active`)
-
-Sample Response:
-```
-{
-    "count": 2,
-    "next": null,
-    "previous": null,
-    "results": [
-        {
-            "id": 1,
-            "name": "Arfa",
-            "created_by": 1,
-            "portfolio_site": "",
-            "display_picture": null,
-            "city": "Mumbai",
-            "state": "Maharashtra",
-            "country": "India",
-            "type": "restaurant",
-            "status": "active",
-            "groups": [
-                1
-            ]
-        },
-        {
-            "id": 2,
-            "name": "Arteria AI",
-            "created_by": 1,
-            "portfolio_site": "",
-            "display_picture": null,
-            "city": "Toronto",
-            "state": "ON",
-            "country": "Canada",
-            "type": "company",
-            "status": "active",
-            "groups": [
-                2
-            ]
-        }
-    ]
-}
-```
-------------------------------------------------------------------------------------------------
-
-> List Category
-
-For all categories:
-    URL: ```api/categories/``` (GET)
-for active categories:
-    URL: ```api/categories/active/``` (GET)
-
-
-### Filter Examples
-- `?status=active` - Filters categories by status.
-- `?type=general` - Filters categories by type, such as `general`.
-- `?description=consultation` - Case-insensitive search by description containing `consultation`.
-- `?organization=<organization_id>` - Filters categories by a specific organization ID.
-- `?organization=<org_id1>,<org_id2>` - Filters categories by a list of organization IDs.
-
-### Search Example
-- `?search=general` - Searches within description field for matches with `general`.
-
-### Ordering Examples
-- `?ordering=created_at` - Orders categories by creation date (ascending).
-- `?ordering=-status` - Orders categories by status (descending).
-
-### Pagination Examples
-- `?page=1` - Returns the first page of results.
-- `?page_size=5` - Adjusts the number of items per page (default is 10, maximum is 100).
-
-### Endpoint Examples
-- **Retrieve specific category by ID**: `/categories/<id>/`
-- **List categories with filters, search, and pagination**: `/categories/?status=active&type=general&description=consultation`
-- **List categories filtered by organization ID**: `/categories/?organization=1`
-- **List categories filtered by multiple organization IDs**: `/categories/?organization=1,2,3`
-- **Custom action for active categories**: `/categories/active/` (lists categories with `status=active`)
-
-
-Sample Response:
-```
-{
-    "count": 2,
-    "next": null,
-    "previous": null,
-    "results": [
-        {
-            "id": 4,
-            "name": null,
-            "status": "active",
-            "type": "general",
-            "estimated_time": null,
-            "description": "Walk in",
-            "created_at": "2024-11-15T03:14:50Z",
-            "group": 4,
-            "organization": 3,
-            "created_by": 2
-        },
-        {
-            "id": 5,
-            "name": null,
-            "status": "active",
-            "type": "inperson",
-            "estimated_time": null,
-            "description": "Drive thru",
-            "created_at": "2024-11-15T03:17:07Z",
-            "group": 5,
-            "organization": 3,
-            "created_by": 2
-        }
-    ]
-}
-```
-
-------------------------------------------------------------------------------------------------
-
-> List Categories under User
-
-> Group("Tims") > user.groups = [Group("Tims")]
-> Category("Tims") > category.group = Group("Tims")
-
-URL: ```api/categories/user/``` (GET)
-
-Can use filter same as above
-?status=active
-
-
-Sample Response:
-```
- SAME AS ABOVE
-```
-
-------------------------------------------------------------------------------------------------
-
-> Flip status of Category.
-
-Will move inactive appointment to the end of the queue.
-Superusers and Group Admin will have access.
-
-URL: ```api/categories/<category-id>/update-status/``` (PATCH)
-
-Sample body:
+- Scheduling configuration (Category)
+    - To support scheduled appointments a `Category` must include scheduling configuration fields. These include `time_zone`, `opening_hours`, `break_hours`, `time_interval_per_appointment`, and `max_advance_days`.
+    - `opening_hours` and `break_hours` are JSON objects keyed by weekday names. Each weekday maps to a list of time ranges (strings `HH:MM`). Example:
 
 ```
 {
-    "status": "inactive"
-}
-```
-
-
-Sample Response:
-```
-{
-    "detail": "Category status updated to active."
-}
-```
-------------------------------------------------------------------------------------------------
-
-> Create Unscheduled Appointment
-
-URL: ```/api/appointments/unschedule/``` (POST)
-```
-{
-    "organization": 1,  # Name of Entity
-    "category": 1, # Restaurant etc.
-    "user":2
-}
-```
-
-Sample Response:
-```
-{
-    "id": 119,
-    "user": 4,
-    "category": 1,
-    "type": "",
-    "organization": 1,
-    "status": "active",
-    "date_created": "2024-10-27T01:23:53.361025Z",
-    "counter": 2,
-    "is_scheduled": false,
-    "estimated_time": null
-}
-```
-
-------------------------------------------------------------------------------------------------
-
-> Create Scheduled Appointment
-
-Before creating scheduled appointments, we need to create a category that has all the data present, for eg,
-
-It should have all the necessary information like, opening hours, break hours, time_interval_per_appointment, max_advance_days
-We also have some validation in place, when you fill out the opening and break hours.
-
-Take a look below for reference.
-
-```
-{
-    "id": 7,
-    "name": "Arfa Sceduled - 1",
-    "status": "active",
-    "type": "inperson",
-    "estimated_time": null,
-    "description": "Dining",
-    "created_at": "2024-11-26T04:56:10Z",
-    "is_scheduled": true,
-    "time_zone": "Canada/Eastern",
+    "time_zone": "Asia/Kolkata",
     "opening_hours": {
-        "Monday": [
-            [
-                "09:00",
-                "17:00"
-            ]
-        ],
-        "Tuesday": [
-            [
-                "09:00",
-                "17:00"
-            ]
-        ],
-        "Wednesday": [
-            [
-                "09:00",
-                "17:00"
-            ]
-        ],
-        "Thursday": [
-            [
-                "09:00",
-                "17:00"
-            ]
-        ],
-        "Friday": [
-            [
-                "09:00",
-                "17:00"
-            ]
-        ],
-        "Saturday": [
-            [
-                "10:00",
-                "14:00"
-            ]
-        ],
+        "Monday": [["09:00","17:00"]],
+        "Tuesday": [["09:00","17:00"]],
+        "Wednesday": [],
+        "Thursday": [["10:00","16:00"]],
+        "Friday": [["09:00","17:00"]],
+        "Saturday": [["10:00","14:00"]],
         "Sunday": []
     },
     "break_hours": {
-        "Monday": [
-            [
-                "12:00",
-                "13:00"
-            ]
-        ],
-        "Tuesday": [
-            [
-                "12:00",
-                "13:00"
-            ]
-        ],
-        "Wednesday": [
-            [
-                "12:00",
-                "13:00"
-            ]
-        ],
-        "Thursday": [
-            [
-                "12:00",
-                "13:00"
-            ]
-        ],
-        "Friday": [
-            [
-                "12:00",
-                "13:00"
-            ]
-        ],
-        "Saturday": [
-            [
-                "12:00",
-                "13:00"
-            ]
-        ],
+        "Monday": [["12:00","13:00"]],
+        "Tuesday": [["12:00","13:00"]],
+        "Wednesday": [],
+        "Thursday": [["12:30","13:00"]],
+        "Friday": [["12:00","13:00"]],
+        "Saturday": [],
         "Sunday": []
     },
     "time_interval_per_appointment": "00:15:00",
-    "max_advance_days": 7,
-    "group": 7,
-    "organization": 1,
-    "created_by": 5
+    "max_advance_days": 14
 }
 ```
 
-Once this is done, you can use the below payload.
+    - The `appointments/availability` endpoint uses these fields to compute available time slots per date. `break_hours` ranges are treated as unavailable windows inside `opening_hours`.
 
-URL: ```/api/appointments/schedule/``` (POST)
-```
-{
-    "user": 2,
-    "category": 7,
-    "organization": 1,
-    "scheduled_time": "2024-12-12T16:15"
-}
-```
+- Category -> Group (permissions workflow)
+    - When creating a `Category` in Django admin (or via management API) the system expects a corresponding Django `Group` to exist with the same name as the category (this project convention links categories to permission groups).
+    - Typical workflow:
+        1. Admin creates a `Category` and (manually or via a small admin action) creates a Django `Group` with the same name.
+        2. When creating organization-level admins, the superuser assigns the appropriate `Group` to the admin user. That group membership limits the categories (and therefore appointments) the admin can see/manage.
+    - This enforces a per-category visibility model: org admins see only categories associated with groups they belong to.
 
-Sample Response:
-```
+- Phone number uniqueness policy
+    - Regular users: `Profile.phone_number` is treated as the primary identifier and must be unique (the code normalizes to E.164 before storing).
+    - Admin users: it's acceptable for admin or system accounts to have a null phone number. Validation enforces uniqueness only when a phone is provided for a regular user.
 
-{
-    "user": 2,
-    "category": 7,
-    "organization": 1,
-    "scheduled_time": "2024-12-12T16:15:00",
-    "scheduled_end_time": "2024-12-12T16:30:00"
-}
 
-```
+Testing & Developer tips
+------------------------
+- Run full test-suite with pytest:
 
-------------------------------------------------------------------------------------------------
+  pytest -q
 
-> Get appointments availablity for Scheduled appointments by Date and Category
+- Use the `sqip` logger output to debug failing tests or requests — many views log actions and validation failures.
+- If you change API error shapes or endpoint names, update tests under `main/*/tests/` accordingly.
 
-URL: ```/api/appointments/availability/?date=<date>&category_id=<id>``` (GET)
+Contributing
+------------
+- Keep API docs in this README in sync with code changes. If you add endpoints, list them under the appropriate group.
+- Prefer backwards-compatible changes; if not possible, update tests and mention migration steps here.
 
-Sample resquest:
-```
-/api/appointments/availability/?date=2024-12-13&category_id=7
-```
+Maintainers & contact
+---------------------
+- Check repository owners and recent committers for who to ping about PRs or design questions.
 
-Sample Response:
-```
-{
-    "date": "2024-12-12",
-    "slots": [
-        [
-            [
-                "09:00",
-                "09:15"
-            ],
-            false
-        ],
-        [
-            [
-                "09:15",
-                "09:30"
-            ],
-            true
-        ],
-        [
-            [
-                "09:30",
-                "09:45"
-            ],
-            false
-        ],
-        [
-            [
-                "09:45",
-                "10:00"
-            ],
-            false
-        ],
-        [
-            [
-                "10:00",
-                "10:15"
-            ],
-            false
-        ],
-        [
-            [
-                "10:15",
-                "10:30"
-            ],
-            false
-        ],
-        [
-            [
-                "10:30",
-                "10:45"
-            ],
-            false
-        ],
-        [
-            [
-                "10:45",
-                "11:00"
-            ],
-            false
-        ],
-        [
-            [
-                "11:00",
-                "11:15"
-            ],
-            false
-        ],
-        [
-            [
-                "11:15",
-                "11:30"
-            ],
-            true
-        ],
-        [
-            [
-                "11:30",
-                "11:45"
-            ],
-            true
-        ],
-        [
-            [
-                "11:45",
-                "12:00"
-            ],
-            true
-        ],
-        [
-            [
-                "13:00",
-                "13:15"
-            ],
-            true
-        ],
-        [
-            [
-                "13:15",
-                "13:30"
-            ],
-            true
-        ],
-        [
-            [
-                "13:30",
-                "13:45"
-            ],
-            false
-        ],
-        [
-            [
-                "13:45",
-                "14:00"
-            ],
-            false
-        ],
-        [
             [
                 "14:00",
                 "14:15"
