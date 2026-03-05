@@ -91,7 +91,7 @@ Organizations
 4) GET /api/organizations/<id>/landing/ — Public landing info suitable for direct linking or QR codes
 
 Sample organization response:
-```
+```json
 {
   "id": 1,
   "name": "Arfa",
@@ -117,7 +117,7 @@ Categories
 4) PATCH /api/categories/<id>/update-status/ — Toggle category status (superusers / group admins). Note: flipping a category to inactive moves its appointments to the end of the queue.
 
 Categories example response (paginated):
-```
+```json
 {
   "count": 2,
   "results": [ ... ]
@@ -148,7 +148,7 @@ Common endpoints and notes for scheduling and walk-ins.
 7) POST /api/appointments/<id>/move/ — Move an appointment position in the queue (admin/group operations)
 
 Scheduling example (category scheduling config):
-```
+```json
 {
   "time_zone": "Canada/Eastern",
   "opening_hours": {
@@ -166,10 +166,10 @@ Scheduling example (category scheduling config):
 ```
 
 Appointments availability response example (slots with boolean available flag):
-```
+```json
 {
-  "date": "2024-12-12",
-  "slots": [ [["09:00","09:15"], false], [["09:15","09:30"], true], ... ]
+    "date": "2024-12-12",
+    "slots": [ [["09:00","09:15"], false], [["09:15","09:30"], true], ... ]
 }
 ```
 

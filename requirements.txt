@@ -37,3 +37,7 @@ twilio==9.3.6
 typing_extensions==4.15.0
 urllib3==2.2.3
 yarl==1.16.0
+
+# Phone number field packages required by the project (ensure CI installs these)
+django-phonenumber-field
+phonenumbers
