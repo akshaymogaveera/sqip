@@ -9,7 +9,8 @@ from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFi
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import ValidationError as DRFValidationError
+from django.core.exceptions import ValidationError as DjangoValidationError
 from main.decorators import view_set_error_handler
 import logging
 
@@ -125,6 +126,76 @@ class CategoryViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @view_set_error_handler
+    def create(self, request, *args, **kwargs):
+        """Allow org-admins (with org_access) or staff to create categories for their organizations."""
+        user = request.user
+        data = request.data
+        org_id = data.get('organization')
+        if not org_id:
+            return Response({'detail': 'organization is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # authorize
+        if not (user.is_staff or user.is_superuser):
+            try:
+                profile = user.profile
+            except Exception:
+                return Response({'detail': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
+
+            if not profile.is_org_admin or not profile.org_access.filter(id=org_id).exists():
+                return Response({'detail': 'Unauthorized to create categories for this organization'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Ensure required fields are set server-side to avoid client errors.
+        # Default status to 'active' if not supplied, and set created_by to the current user.
+        # Build a mutable copy of the incoming data for serializer validation.
+        try:
+            incoming = {} if data is None else dict(data)
+        except Exception:
+            # Fallback for QueryDict-like objects
+            incoming = {k: v for k, v in request.data.items()}
+
+        if 'status' not in incoming or not incoming.get('status'):
+            incoming['status'] = 'active'
+
+        # Attach current user's id as created_by so serializer/model requirements are satisfied
+        try:
+            incoming['created_by'] = user.id
+        except Exception:
+            pass
+
+        serializer = self.get_serializer(data=incoming)
+        try:
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+        except DjangoValidationError as e:
+            # Return a clean 400 with validation messages from model.clean()/save()
+            msgs = e.messages if hasattr(e, 'messages') else [str(e)]
+            return Response({'detail': ' '.join(msgs)}, status=status.HTTP_400_BAD_REQUEST)
+        except DRFValidationError:
+            # Let DRF handle serializer validation errors
+            raise
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    @view_set_error_handler
+    def destroy(self, request, *args, **kwargs):
+        """Allow org-admins (with org_access) or staff to delete categories for their organizations."""
+        user = request.user
+        pk = kwargs.get('pk')
+        category = get_object_or_404(Category, pk=pk)
+
+        if not (user.is_staff or user.is_superuser):
+            try:
+                profile = user.profile
+            except Exception:
+                return Response({'detail': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
+
+            if not profile.is_org_admin or not profile.org_access.filter(id=category.organization_id).exists():
+                return Response({'detail': 'Unauthorized to delete this category'}, status=status.HTTP_403_FORBIDDEN)
+
+        return super().destroy(request, *args, **kwargs)
     
     @action(detail=False, methods=["get"], url_path="active", permission_classes=[AllowAny], authentication_classes=[])
     @view_set_error_handler
@@ -173,6 +244,45 @@ class CategoryViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
     
 
+    @action(detail=True, methods=["patch"], url_path="update-info")
+    @view_set_error_handler
+    def update_info(self, request, pk=None):
+        """Update editable fields on a category (name, description, type, is_scheduled, etc).
+
+        Intentionally does NOT allow changing group or organization.
+        Authorized for staff/superuser or org-admins with org_access for this category's org.
+        """
+        category = get_object_or_404(Category, pk=pk)
+        user = request.user
+
+        if not (user.is_staff or user.is_superuser):
+            try:
+                profile = user.profile
+            except Exception:
+                return Response({'detail': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
+            if not (profile.is_org_admin and profile.org_access.filter(id=category.organization_id).exists()):
+                return Response({'detail': 'Unauthorized to edit this category'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Only allow these fields — protect group and organization
+        EDITABLE = {'name', 'description', 'type', 'is_scheduled', 'time_zone',
+                    'opening_hours', 'break_hours', 'time_interval_per_appointment', 'max_advance_days'}
+        payload = {k: v for k, v in (request.data or {}).items() if k in EDITABLE}
+        if not payload:
+            return Response({'detail': 'No editable fields provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = self.get_serializer(category, data=payload, partial=True)
+        try:
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+        except DjangoValidationError as e:
+            msgs = e.messages if hasattr(e, 'messages') else [str(e)]
+            return Response({'detail': ' '.join(msgs)}, status=status.HTTP_400_BAD_REQUEST)
+        except DRFValidationError:
+            raise
+
+        logger.info("User %d (%s) updated info on category %s.", user.id, user.username, pk)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=["patch"], url_path="update-status")
     @view_set_error_handler
     def update_status(self, request, pk=None):
@@ -198,7 +308,11 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
         # Update and save the category
         category.status = new_status
-        category.save()
+        try:
+            category.save()
+        except DjangoValidationError as e:
+            msgs = e.messages if hasattr(e, 'messages') else [str(e)]
+            return Response({'detail': ' '.join(msgs)}, status=status.HTTP_400_BAD_REQUEST)
 
         logger.info(
             "Category %d status updated to %s by user %d (%s).",

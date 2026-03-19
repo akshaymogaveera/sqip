@@ -114,7 +114,25 @@ def get_unscheduled_appointments_for_superuser(category_ids=None, status="active
 
 def get_authorized_categories_for_user(user):
     """Get categories associated with the user's groups."""
-    return Category.objects.filter(group__in=user.groups.all()).distinct()
+    # Superusers / staff can access everything
+    try:
+        profile = user.profile
+    except Exception:
+        profile = None
+
+    if user.is_staff or user.is_superuser:
+        return Category.objects.all()
+
+    categories_by_group = Category.objects.filter(group__in=user.groups.all())
+
+    # If user is an org-admin, include categories for organizations in their org_access
+    if profile and getattr(profile, 'is_org_admin', False):
+        orgs = profile.org_access.all()
+        if orgs.exists():
+            categories_by_org = Category.objects.filter(organization__in=orgs)
+            return (categories_by_group | categories_by_org).distinct()
+
+    return categories_by_group.distinct()
 
 
 def get_unscheduled_appointments_for_user(user, category_ids=None, status="active"):

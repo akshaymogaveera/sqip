@@ -250,6 +250,15 @@ class UserMeView(APIView):
             phone = str(user.profile.phone_number) if user.profile.phone_number else None
         except Exception:
             pass
+        # Include org-admin flags and org_access list when available
+        is_org_admin = False
+        org_access = []
+        try:
+            is_org_admin = bool(user.profile.is_org_admin)
+            org_access = list(user.profile.org_access.values_list('id', flat=True))
+        except Exception:
+            pass
+
         return Response({
             'id': user.id,
             'username': user.username,
@@ -259,6 +268,8 @@ class UserMeView(APIView):
             'phone': phone,
             'is_staff': user.is_staff,
             'is_superuser': user.is_superuser,
+            'is_org_admin': is_org_admin,
+            'org_access': org_access,
             'groups': groups,
         }, status=status.HTTP_200_OK)
 

@@ -7,6 +7,7 @@ import uuid
 from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import Group
+from django.utils.text import slugify
 from django.contrib.auth import get_user_model
 from django.forms.models import model_to_dict
 import phonenumbers
@@ -47,6 +48,13 @@ class Organization(models.Model):
     type = models.CharField(max_length=20, choices=TYPE)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     groups = models.ManyToManyField(Group, related_name="organizations")
+    # Optional limits enforced for org-admins (null/blank => unlimited)
+    max_categories = models.PositiveIntegerField(
+        null=True, blank=True, help_text="Maximum number of categories allowed for this organization. Null means unlimited."
+    )
+    max_config_users = models.PositiveIntegerField(
+        null=True, blank=True, help_text="Maximum number of config/admin users allowed for this organization. Null means unlimited."
+    )
 
 
 class Category(models.Model):
@@ -100,6 +108,27 @@ class Category(models.Model):
     )
 
     def save(self, *args, **kwargs):
+        # Enforce organization-level max_categories if set
+        if self.organization and hasattr(self.organization, 'max_categories') and self.organization.max_categories is not None:
+            # When creating (no id yet) count existing categories
+            existing_count = Category.objects.filter(organization=self.organization).count()
+            creating = self._state.adding
+            if creating and existing_count >= self.organization.max_categories:
+                raise ValidationError(f"Organization has reached its max_categories limit ({self.organization.max_categories}).")
+
+        # Ensure a Group exists for this Category following the 1:1 convention.
+        if not self.group:
+            # Derive a unique group name using org id and slugified category name
+            base = f"org-{self.organization.id}-{slugify(self.name or 'category')}"
+            # Ensure uniqueness by appending suffix if needed
+            group_name = base
+            suffix = 0
+            while Group.objects.filter(name=group_name).exists():
+                suffix += 1
+                group_name = f"{base}-{suffix}"
+            grp = Group.objects.create(name=group_name)
+            self.group = grp
+
         self.full_clean()  # Validates the data before saving
         super().save(*args, **kwargs)
             
@@ -261,6 +290,10 @@ class Profile(models.Model):
     phone_number = PhoneNumberField(blank=True, null=True, unique=True)
     otp = models.CharField(max_length=100, null=True, blank=True)
     uid = models.CharField(default=f"{uuid.uuid4}", max_length=200)
+    # Whether this user is an organization-level admin (can manage categories/users for organizations in org_access)
+    is_org_admin = models.BooleanField(default=False)
+    # Organizations this profile has admin access to (empty => none)
+    org_access = models.ManyToManyField('Organization', blank=True, related_name='access_profiles')
 
     def clean(self):
         super().clean()

@@ -674,6 +674,19 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
 
                     # create profile with phone
                     profile = Profile.objects.create(user=user, phone_number=phone)
+                    # Optionally assign this new user as a category-admin if requested and authorized.
+                    # Payload may include `category_admin_for`: <category_id>
+                    cat_admin_for = data.get('category_admin_for')
+                    if cat_admin_for:
+                        try:
+                            from main.service import get_category
+                            category_obj = get_category(int(cat_admin_for))
+                            # Ensure group exists on category (Category.save handles auto-creation)
+                            if category_obj and category_obj.group:
+                                user.groups.add(category_obj.group)
+                        except Exception:
+                            # Non-fatal: ignore invalid category or permission errors here
+                            pass
 
                 # Now create appointment: reuse scheduling logic
                 appointment_payload = {"organization": org_id, "category": category_id, "user": user.id}
