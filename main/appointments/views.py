@@ -14,7 +14,7 @@ from main.service import (
     set_appointment_status_and_update_counter,
     checkout_appointment,
 )
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 
 from rest_framework import viewsets
 from rest_framework.response import Response
@@ -228,6 +228,34 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
 
         serializer = AppointmentSerializer(unscheduled_appointments, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["get"], url_path="unscheduled-count", permission_classes=[IsAuthenticated])
+    @view_set_error_handler
+    def unscheduled_count(self, request):
+        """Return a count-only view of unscheduled appointments for the requested categories.
+
+        This endpoint intentionally returns only a JSON object { count: N } and does
+        not include appointment objects or any user-identifying data. It is safe to
+        call from unauthenticated clients.
+        """
+        # Reuse the same query param serializer so callers can pass category_id and status
+        query_params_serializer = AppointmentListQueryParamsSerializer(data=request.query_params)
+        query_params_serializer.is_valid(raise_exception=True)
+        category_ids = query_params_serializer.validated_data.get("category_id", [])
+        status_q = query_params_serializer.validated_data.get("status", "active")
+
+        logger.info("Count request for unscheduled appointments received. category_ids=%s, status=%s", category_ids, status_q)
+
+        # Use the superuser queryset to compute a global count (do not restrict by caller).
+        qs = get_unscheduled_appointments_for_superuser(category_ids=category_ids, status=status_q)
+
+        try:
+            cnt = qs.count()
+        except Exception:
+            # Fall back to evaluating len() if count() fails for any reason
+            cnt = len(list(qs))
+
+        return Response({"count": cnt}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["post"], url_path="unschedule")
     @view_set_error_handler
@@ -585,6 +613,43 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         )
 
         return Response(available_slots)
+
+
+    @action(detail=False, methods=["get"], url_path="scheduled-count")
+    def scheduled_count(self, request):
+        """
+        Return the number of scheduled appointments the requesting user has on a given date
+        for a category, plus the category's per-day limit (if configured).
+
+        Query params:
+          - date: YYYY-MM-DD
+          - category_id: integer
+        """
+        query_params_serializer = SlotQueryParamsSerializer(data=request.query_params)
+        query_params_serializer.is_valid(raise_exception=True)
+        query_date = query_params_serializer.validated_data["date"]
+        category_id = query_params_serializer.validated_data["category_id"]
+
+        # Validate category
+        from main.service import check_category_is_active
+        category = check_category_is_active(category_id)
+        if not category:
+            return Response({"detail": "Category not found or inactive."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Count scheduled appointments for this user on the given date
+        user = request.user
+        # Count only active scheduled appointments for the user on that date
+        count = Appointment.objects.filter(
+            user=user,
+            category=category,
+            is_scheduled=True,
+            status="active",
+            scheduled_time__date=query_date,
+        ).count()
+
+        limit = getattr(category, 'max_scheduled_per_user_per_day', None)
+
+        return Response({"count": count, "limit": limit})
 
     @action(detail=False, methods=["post"], url_path="add_user_to_queue")
     @view_set_error_handler

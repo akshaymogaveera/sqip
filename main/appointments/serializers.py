@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import pytz
 from django.utils.timezone import now
 from main.exceptions import UnauthorizedAccessException
 from main.service import (
@@ -368,6 +369,42 @@ class ValidateScheduledAppointmentInput(serializers.Serializer):
             )
         
         validate_scheduled_appointment(category, scheduled_time)
+
+        # Enforce per-user per-day scheduled appointment limit if configured on category.
+        try:
+            limit = getattr(category, 'max_scheduled_per_user_per_day', None)
+        except Exception:
+            limit = None
+
+        # Only enforce for regular users (allow staff/superusers to bypass)
+        request_user = self.context["request"].user
+        if limit is not None and not (request_user.is_staff or request_user.is_superuser):
+            # Determine the calendar day in the category timezone for the scheduled_time
+            category_tz = pytz.timezone(category.time_zone)
+            # Ensure naive localized datetime in category tz
+            naive = scheduled_time
+            if scheduled_time.tzinfo is not None:
+                naive = scheduled_time.replace(tzinfo=None)
+            local_dt = category_tz.localize(naive)
+            day_start = local_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = day_start + timedelta(days=1)
+            day_start_utc = day_start.astimezone(pytz.utc)
+            day_end_utc = day_end.astimezone(pytz.utc)
+
+            # Count existing scheduled appointments for the target user on that day and category
+            existing_count = Appointment.objects.filter(
+                user_id=attrs.get("user"),
+                category=category,
+                is_scheduled=True,
+                status="active",
+                scheduled_time__gte=day_start_utc,
+                scheduled_time__lt=day_end_utc,
+            ).count()
+
+            if existing_count >= limit:
+                raise serializers.ValidationError(
+                    f"User already has {existing_count} scheduled appointment(s) on this date; the limit is {limit} per day."
+                )
 
         attrs["scheduled_end_time"] = scheduled_time + category.time_interval_per_appointment
 

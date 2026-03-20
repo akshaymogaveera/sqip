@@ -106,6 +106,13 @@ class Category(models.Model):
         help_text="Maximum number of days in the future an appointment can be scheduled.",
         blank=True
     )
+    # Maximum number of scheduled appointments a single user may have per calendar day
+    # Null/blank means unlimited
+    max_scheduled_per_user_per_day = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Maximum number of scheduled appointments a single user may create per calendar day. Null means unlimited."
+    )
 
     def save(self, *args, **kwargs):
         # Enforce organization-level max_categories if set
