@@ -137,6 +137,10 @@ def get_authorized_categories_for_user(user):
 
 def get_unscheduled_appointments_for_user(user, category_ids=None, status="active"):
     """Retrieve unscheduled appointments for a non-superuser, optionally filtering by category IDs."""
+    # If user is staff/superuser, restrict to their own appointments only
+    if getattr(user, 'is_staff', False) or getattr(user, 'is_superuser', False):
+        return get_user_appointments(user=user, is_scheduled=False, status=status).order_by('counter')
+
     authorized_categories = get_authorized_categories_for_user(user)
     # If the user has no authorized categories, return user appointments only
     if not authorized_categories:
@@ -168,6 +172,10 @@ def get_scheduled_appointments_for_superuser(category_ids=None, status="active")
 
 def get_scheduled_appointments_for_user(user, category_ids=None, status="active"):
     """Retrieve scheduled appointments for a non-superuser, optionally filtering by category IDs."""
+    # If user is staff/superuser, restrict to their own appointments only
+    if getattr(user, 'is_staff', False) or getattr(user, 'is_superuser', False):
+        return get_user_appointments(user=user, is_scheduled=True, status=status).order_by('scheduled_time')
+
     authorized_categories = get_authorized_categories_for_user(user)
     # If the user has no authorized organizations, return user appointments only
     if not authorized_categories:

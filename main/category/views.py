@@ -47,8 +47,8 @@ class CategoryFilter(FilterSet):
             # Apply the filter
             return queryset.filter(organization_id__in=organization_ids)
         except ValueError:
-            # Return a 400 response if the conversion fails
-            raise ValidationError({"detail": "Invalid organization ID format. Expected integer values."})
+            # Return a DRF ValidationError so DRF produces a standard error response
+            raise DRFValidationError({"detail": "Invalid organization ID format. Expected integer values."})
     
     
 
