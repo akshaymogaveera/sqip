@@ -1,4 +1,5 @@
 from django.shortcuts import get_object_or_404
+from django.contrib.auth.models import Group
 from main.models import Category
 from main.service import get_category
 from main.category.serializers import CategorySerializer, ValidateCategorySerializer
@@ -195,7 +196,19 @@ class CategoryViewSet(viewsets.ModelViewSet):
             if not profile.is_org_admin or not profile.org_access.filter(id=category.organization_id).exists():
                 return Response({'detail': 'Unauthorized to delete this category'}, status=status.HTTP_403_FORBIDDEN)
 
-        return super().destroy(request, *args, **kwargs)
+        # Capture the associated group before deleting the category
+        associated_group = category.group
+
+        response = super().destroy(request, *args, **kwargs)
+
+        # Delete the associated Group after the category is gone
+        if associated_group:
+            try:
+                Group.objects.filter(pk=associated_group.pk).delete()
+            except Exception as e:
+                logger.warning("Could not delete group for category %s: %s", pk, e)
+
+        return response
     
     @action(detail=False, methods=["get"], url_path="active", permission_classes=[AllowAny], authentication_classes=[])
     @view_set_error_handler
@@ -265,7 +278,9 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
         # Only allow these fields — protect group and organization
         EDITABLE = {'name', 'description', 'type', 'is_scheduled', 'time_zone',
-                    'opening_hours', 'break_hours', 'time_interval_per_appointment', 'max_advance_days'}
+                    'opening_hours', 'break_hours', 'time_interval_per_appointment',
+                    'max_advance_days', 'max_scheduled_per_user_per_day',
+                    'estimated_time', 'address_line1', 'address_line2', 'pincode', 'phone_number'}
         payload = {k: v for k, v in (request.data or {}).items() if k in EDITABLE}
         if not payload:
             return Response({'detail': 'No editable fields provided'}, status=status.HTTP_400_BAD_REQUEST)

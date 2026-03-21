@@ -45,6 +45,10 @@ class Organization(models.Model):
     city = models.CharField(max_length=20)
     state = models.CharField(max_length=20, blank=True)
     country = models.CharField(max_length=20)
+    address_line1 = models.CharField(max_length=255, blank=True, default='', help_text="Street address / building number")
+    address_line2 = models.CharField(max_length=255, blank=True, default='', help_text="Floor, suite, landmark, etc.")
+    pincode = models.CharField(max_length=20, blank=True, default='', help_text="Postal / ZIP code")
+    phone_number = PhoneNumberField(blank=True, null=True, help_text="Primary contact number for this organization (E.164 format, e.g. +911234567890)")
     type = models.CharField(max_length=20, choices=TYPE)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     groups = models.ManyToManyField(Group, related_name="organizations")
@@ -82,9 +86,16 @@ class Category(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     type = models.CharField(max_length=20, choices=CHOICES, blank=True)
-    estimated_time = models.DateTimeField(null=True, blank=True)
+    estimated_time = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="Estimated time per appointment in minutes. Used to calculate wait time for walk-in queues."
+    )
     description = models.CharField(max_length=255, blank=True, null=True)
     created_at = models.DateTimeField(blank=True, null=True, default=timezone.now)
+    address_line1 = models.CharField(max_length=255, blank=True, default='', help_text="Location-specific street address (overrides org address if set)")
+    address_line2 = models.CharField(max_length=255, blank=True, default='', help_text="Floor, suite, landmark, etc.")
+    pincode = models.CharField(max_length=20, blank=True, default='', help_text="Postal / ZIP code")
+    phone_number = PhoneNumberField(blank=True, null=True, help_text="Location-specific contact number (overrides org phone if set)")
     is_scheduled = models.BooleanField(default=False)
     time_zone = models.CharField(
         max_length=50, 

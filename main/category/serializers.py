@@ -3,12 +3,23 @@ from main.models import Category
 from main.service import get_category, get_authorized_categories_for_user
 from main.exceptions import UnauthorizedAccessException
 from datetime import timedelta
+import phonenumbers as pn
 
 
 class CategorySerializer(serializers.ModelSerializer):
+    phone_number = serializers.SerializerMethodField()
+
     class Meta:
         model = Category
-        fields = "__all__"  # Or list specific fields if needed
+        fields = "__all__"
+
+    def get_phone_number(self, obj):
+        if obj.phone_number:
+            try:
+                return pn.format_number(obj.phone_number, pn.PhoneNumberFormat.E164)
+            except Exception:
+                return str(obj.phone_number)
+        return None
 
     def to_internal_value(self, data):
         """Accept time_interval_per_appointment as integer minutes or HH:MM:SS string."""

@@ -22,6 +22,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
     organization_name = serializers.SerializerMethodField()
     category_name = serializers.SerializerMethodField()
     category_description = serializers.SerializerMethodField()
+    category_estimated_time = serializers.SerializerMethodField()
     username = serializers.SerializerMethodField()
     user_email = serializers.SerializerMethodField()
     user_phone = serializers.SerializerMethodField()
@@ -42,6 +43,12 @@ class AppointmentSerializer(serializers.ModelSerializer):
 
     def get_category_description(self, obj):
         return obj.category.description if obj.category else None
+
+    def get_category_estimated_time(self, obj):
+        """Return category.estimated_time (minutes) so the frontend can compute wait time."""
+        if obj.category and obj.category.estimated_time is not None:
+            return obj.category.estimated_time
+        return None
 
     def get_username(self, obj):
         return obj.user.username if obj.user else None

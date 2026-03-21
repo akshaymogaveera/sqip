@@ -690,8 +690,19 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
 
         User = get_user_model()
 
-        phone = data["phone"].strip()
+        phone_raw = data["phone"].strip()
+        country_code = data.get("country_code", "").strip().upper() or None
         email = data.get("email", "").strip()
+
+        # Normalize phone to E.164 using phonenumbers, respecting the supplied country_code
+        import phonenumbers as pn
+        try:
+            parsed = pn.parse(phone_raw, country_code)
+            if not pn.is_valid_number(parsed):
+                return Response({"errors": {"phone": ["Phone number is not valid for the selected country."]}}, status=status.HTTP_400_BAD_REQUEST)
+            phone = pn.format_number(parsed, pn.PhoneNumberFormat.E164)
+        except pn.phonenumberutil.NumberParseException:
+            return Response({"errors": {"phone": ["Phone number is not a valid international number"]}}, status=status.HTTP_400_BAD_REQUEST)
 
         # Try to find existing user by email or phone
         user = None
