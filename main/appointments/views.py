@@ -604,14 +604,14 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         # Extract validated data
         query_date = query_params_serializer.validated_data["date"]
         category_id = query_params_serializer.validated_data["category_id"]
-        # Call the service function to get available slots
-        available_slots = get_available_slots_for_category(category_id, query_date)
 
         logger.info(
-            "List availability list for user %d, date: %s",
-            self.request.user.id, str(query_date)
+            "List availability for user=%s, category_id=%s, date=%s",
+            getattr(self.request.user, 'id', None), category_id, str(query_date)
         )
 
+        # Call the service function to get available slots
+        available_slots = get_available_slots_for_category(category_id, query_date)
         return Response(available_slots)
 
 

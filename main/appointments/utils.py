@@ -21,7 +21,6 @@ def generate_time_slots(opening_hours, break_hours, interval_minutes):
     # Step 1: Convert all times to datetime objects
     opening_start, opening_end = map(str_to_time, opening_hours[0])  # Corrected to handle list of lists
     break_ranges = [(str_to_time(start), str_to_time(end)) for start, end in break_hours]
-
     # Step 2: Calculate usable time blocks
     usable_blocks = []
     current_start = opening_start

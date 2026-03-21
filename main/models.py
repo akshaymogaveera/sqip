@@ -135,6 +135,15 @@ class Category(models.Model):
                 group_name = f"{base}-{suffix}"
             grp = Group.objects.create(name=group_name)
             self.group = grp
+            # Ensure the newly created Group is associated with the Organization's groups
+            try:
+                if self.organization:
+                    # organization.groups is a ManyToManyField
+                    self.organization.groups.add(grp)
+            except Exception:
+                # If anything goes wrong here, don't prevent saving the Category;
+                # the association is best-effort and can be fixed later.
+                pass
 
         self.full_clean()  # Validates the data before saving
         super().save(*args, **kwargs)
