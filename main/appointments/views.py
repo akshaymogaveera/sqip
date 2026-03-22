@@ -699,11 +699,14 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         import phonenumbers as pn
         try:
             parsed = pn.parse(phone_raw, country_code)
-            if not pn.is_valid_number(parsed):
-                return Response({"errors": {"phone": ["Phone number is not valid for the selected country."]}}, status=status.HTTP_400_BAD_REQUEST)
+            # is_valid_number checks assigned ranges; some real numbers (esp. NANP/CA) may
+            # pass is_possible_number but fail is_valid_number due to range data gaps.
+            # Accept the number if it is either strictly valid or at least possible.
+            if not pn.is_valid_number(parsed) and not pn.is_possible_number(parsed):
+                return Response({"errors": {"phone": ["Phone number is not valid for the selected country. Please include the full number with area code."]}}, status=status.HTTP_400_BAD_REQUEST)
             phone = pn.format_number(parsed, pn.PhoneNumberFormat.E164)
         except pn.phonenumberutil.NumberParseException:
-            return Response({"errors": {"phone": ["Phone number is not a valid international number"]}}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"errors": {"phone": ["Could not parse phone number. Enter the local number without the country code — it will be added automatically."]}}, status=status.HTTP_400_BAD_REQUEST)
 
         # Try to find existing user by email or phone
         user = None
