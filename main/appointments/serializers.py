@@ -13,7 +13,7 @@ from main.service import (
 )
 from rest_framework import serializers, status
 import phonenumbers
-from main.models import Appointment, Category, Organization
+from main.models import Appointment, AppointmentNote, Category, Organization
 from main.appointments.service import validate_scheduled_appointment
 from main.utils import convert_time_to_utc
 
@@ -530,3 +530,36 @@ class AdminAddUserToQueueSerializer(serializers.Serializer):
         phone = attrs.get('phone')
         attrs['phone'] = self.validate_phone(phone)
         return attrs
+
+
+class AppointmentNoteSerializer(serializers.ModelSerializer):
+    """Serializer for AppointmentNote.
+
+    - All fields are read-only for regular users (enforced in the view).
+    - `added_by_name` is a friendly display name derived from the User FK.
+    - `has_file` is a convenience boolean so the client doesn't have to read
+      the (potentially large) file_data field just to know a file exists.
+    - `file_data` is excluded from list responses; only included when a
+      single note is fetched (handled by the view) to avoid large payloads.
+    """
+    added_by_name = serializers.SerializerMethodField()
+    has_file = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AppointmentNote
+        fields = [
+            'id', 'appointment', 'content',
+            'file_data', 'file_name', 'file_mime', 'has_file',
+            'added_by', 'added_by_name', 'is_admin_note', 'created_at',
+        ]
+        read_only_fields = ['id', 'appointment', 'added_by', 'is_admin_note', 'created_at', 'added_by_name', 'has_file']
+
+    def get_added_by_name(self, obj):
+        if not obj.added_by:
+            return None
+        u = obj.added_by
+        full = f"{u.first_name} {u.last_name}".strip()
+        return full or u.username
+
+    def get_has_file(self, obj):
+        return bool(obj.file_data)

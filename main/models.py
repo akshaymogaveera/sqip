@@ -42,6 +42,9 @@ class Organization(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
     portfolio_site = models.URLField(blank=True)
     display_picture = models.ImageField(upload_to="display_picture", blank=True)
+    # Stores the display picture as a base64 data-URL (e.g. "data:image/png;base64,...")
+    # so the image is kept in the DB instead of the filesystem.
+    display_picture_base64 = models.TextField(blank=True, default='', help_text="Base64-encoded data URL for the display picture (preferred over ImageField path).")
     city = models.CharField(max_length=20)
     state = models.CharField(max_length=20, blank=True)
     country = models.CharField(max_length=20)
@@ -308,6 +311,47 @@ class SubCategory(models.Model):
 class AppointmentMapToSubCategory(models.Model):
     category = models.ForeignKey(Category, on_delete=models.PROTECT)
     appointment = models.ForeignKey(Appointment, on_delete=models.PROTECT)
+
+
+class AppointmentNote(models.Model):
+    """A note (and optional file attachment) added to an appointment.
+
+    Admins can add notes with or without a file attachment.
+    Regular users can only add a plain text note (no file).
+    Users can view all notes on their appointment but cannot edit or delete any.
+    Only admins may delete notes.
+    """
+    appointment = models.ForeignKey(
+        Appointment, on_delete=models.CASCADE, related_name='notes'
+    )
+    content = models.TextField(blank=True, default='', help_text="Text body of the note.")
+    # File attachment stored as a base64 data-URL (e.g. "data:application/pdf;base64,...")
+    file_data = models.TextField(
+        blank=True, default='',
+        help_text="Base64-encoded file content (data URL). Leave empty if no file."
+    )
+    file_name = models.CharField(
+        max_length=255, blank=True, default='',
+        help_text="Original filename for the attachment."
+    )
+    file_mime = models.CharField(
+        max_length=100, blank=True, default='',
+        help_text="MIME type of the attachment (e.g. application/pdf)."
+    )
+    added_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='appointment_notes'
+    )
+    is_admin_note = models.BooleanField(
+        default=False,
+        help_text="True if added by a category admin; False if added by the booking user."
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Note #{self.pk} on Appointment #{self.appointment_id}"
 
 
 class Profile(models.Model):

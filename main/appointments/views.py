@@ -27,6 +27,7 @@ from main.appointments.serializers import (
     AppointmentIDValidatorSerializer,
     AppointmentListValidate,
     AppointmentSerializer,
+    AppointmentNoteSerializer,
     CreateAppointmentSerializer,
     MakeAppointmentSerializer,
     MoveAppointmentIDValidatorSerializer,
@@ -794,3 +795,155 @@ class AppointmentListCreateView(viewsets.ModelViewSet):
         # Return created appointment representation
         resp = AppointmentSerializer(appointment, context={"request": request}).data
         return Response(resp, status=status.HTTP_201_CREATED)
+
+    # ------------------------------------------------------------------
+    # Appointment Notes
+    # ------------------------------------------------------------------
+
+    @action(detail=True, methods=["get", "post"], url_path="notes")
+    @view_set_error_handler
+    def notes(self, request, pk=None):
+        """GET/POST notes on a specific appointment.
+
+        GET — list all notes for the appointment.
+              Available to the appointment owner and any admin with category access.
+        POST — add a new note.
+              - Admin (staff / group admin): may include `file_data`, `file_name`, `file_mime`.
+              - Regular user: may only include `content`; file fields are ignored.
+
+        POST payload (admin):
+            {
+                "content": "Please bring ID",
+                "file_data": "data:application/pdf;base64,...",
+                "file_name": "id_instructions.pdf",
+                "file_mime": "application/pdf"
+            }
+
+        POST payload (user):
+            { "content": "I'll be 5 minutes late." }
+        """
+        from main.models import AppointmentNote
+
+        # Resolve the appointment
+        try:
+            appointment = Appointment.objects.select_related('user', 'category').get(pk=pk)
+        except Appointment.DoesNotExist:
+            return Response({"errors": "Appointment not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        user = request.user
+        is_admin = (
+            user.is_superuser
+            or user.is_staff
+            or (appointment.category and user.groups.filter(pk=appointment.category.group_id).exists())
+        )
+        is_owner = appointment.user_id == user.id
+
+        if not is_admin and not is_owner:
+            return Response({"errors": "You do not have access to this appointment."}, status=status.HTTP_403_FORBIDDEN)
+
+        if request.method == "GET":
+            notes_qs = AppointmentNote.objects.filter(appointment=appointment).select_related('added_by')
+            # Omit file_data from list to keep payload small
+            serializer = AppointmentNoteSerializer(notes_qs, many=True)
+            data = serializer.data
+            for item in data:
+                item.pop('file_data', None)
+            return Response(data, status=status.HTTP_200_OK)
+
+        # POST — create a new note
+        content = (request.data.get('content') or '').strip()
+        file_data = (request.data.get('file_data') or '').strip() if is_admin else ''
+        file_name = (request.data.get('file_name') or '').strip() if is_admin else ''
+        file_mime = (request.data.get('file_mime') or '').strip() if is_admin else ''
+
+        if not content and not file_data:
+            return Response({"errors": {"content": ["Note must have content or a file attachment."]}}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate content length
+        if len(content) > 1000:
+            return Response({"errors": {"content": ["Note must be 1000 characters or fewer."]}}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate file mime type
+        ALLOWED_MIMES = {
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'application/pdf'
+        }
+        if file_data and file_mime and file_mime not in ALLOWED_MIMES:
+            return Response({"errors": {"file_mime": ["Only image files (JPEG, PNG, GIF, WebP, SVG) and PDF files are allowed."]}}, status=status.HTTP_400_BAD_REQUEST)
+
+        note = AppointmentNote.objects.create(
+            appointment=appointment,
+            content=content,
+            file_data=file_data,
+            file_name=file_name,
+            file_mime=file_mime,
+            added_by=user,
+            is_admin_note=is_admin,
+        )
+        serializer = AppointmentNoteSerializer(note)
+        resp_data = dict(serializer.data)
+        # Don't echo back the (potentially large) file_data; client already has it
+        resp_data.pop('file_data', None)
+        return Response(resp_data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["delete"], url_path=r"notes/(?P<note_pk>[0-9]+)")
+    @view_set_error_handler
+    def delete_note(self, request, pk=None, note_pk=None):
+        """DELETE a specific note. Admin only."""
+        from main.models import AppointmentNote
+
+        user = request.user
+        try:
+            appointment = Appointment.objects.get(pk=pk)
+        except Appointment.DoesNotExist:
+            return Response({"errors": "Appointment not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        is_admin = (
+            user.is_superuser
+            or user.is_staff
+            or (appointment.category and user.groups.filter(pk=appointment.category.group_id).exists())
+        )
+        if not is_admin:
+            return Response({"errors": "Only admins can delete notes."}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            note = AppointmentNote.objects.get(pk=note_pk, appointment=appointment)
+        except AppointmentNote.DoesNotExist:
+            return Response({"errors": "Note not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        note.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["get"], url_path=r"notes/(?P<note_pk>[0-9]+)/file")
+    @view_set_error_handler
+    def download_note_file(self, request, pk=None, note_pk=None):
+        """GET the file_data for a single note so the client can download it.
+
+        Returns { file_data, file_name, file_mime } — only if caller has access.
+        """
+        from main.models import AppointmentNote
+
+        try:
+            appointment = Appointment.objects.get(pk=pk)
+        except Appointment.DoesNotExist:
+            return Response({"errors": "Appointment not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        user = request.user
+        is_admin = (
+            user.is_superuser
+            or user.is_staff
+            or (appointment.category and user.groups.filter(pk=appointment.category.group_id).exists())
+        )
+        is_owner = appointment.user_id == user.id
+        if not is_admin and not is_owner:
+            return Response({"errors": "No access."}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            note = AppointmentNote.objects.get(pk=note_pk, appointment=appointment)
+        except AppointmentNote.DoesNotExist:
+            return Response({"errors": "Note not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response({
+            "file_data": note.file_data,
+            "file_name": note.file_name,
+            "file_mime": note.file_mime,
+        }, status=status.HTTP_200_OK)
